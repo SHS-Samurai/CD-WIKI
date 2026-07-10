@@ -24,6 +24,7 @@ urlpatterns = [
         account_views.AuditedLogoutView.as_view(),
         name="logout",
     ),
+    path("admin/login/", account_views.admin_login_redirect, name="admin_login_redirect"),
     path("accounts/register/", account_views.register, name="register"),
     path(
         "accounts/register/confirm/<str:token>/",

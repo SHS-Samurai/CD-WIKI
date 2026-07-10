@@ -2,13 +2,17 @@ import hashlib
 import json
 import mimetypes
 import os
+from io import BytesIO
 from pathlib import Path, PurePath
+from zipfile import BadZipFile, ZipFile
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation, ValidationError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_valid_filename
+
+from apps.storage_security import ensure_private_parent, secure_private_file
 
 from .models import Attachment
 
@@ -38,9 +42,8 @@ def save_attachment_revision(
 ) -> Attachment:
     original_filename = clean_attachment_filename(uploaded_file.name)
     storage_name = attachment_storage_name(uploaded_file.name)
-    _validate_upload(uploaded_file, storage_name)
-
     content_bytes = _read_upload(uploaded_file)
+    _validate_upload(uploaded_file, storage_name, content_bytes)
     digest = hashlib.sha256(content_bytes).hexdigest()
     content_type = _content_type(uploaded_file, storage_name)
 
@@ -116,7 +119,7 @@ def attachment_storage_name(filename: str) -> str:
     return clean_attachment_filename(filename).lower()
 
 
-def _validate_upload(uploaded_file, storage_name: str) -> None:
+def _validate_upload(uploaded_file, storage_name: str, content: bytes) -> None:
     extension = Path(storage_name).suffix.lower()
     if extension in settings.WIKI_BLOCKED_ATTACHMENT_EXTENSIONS:
         raise ValidationError("Dieser Dateityp ist nicht erlaubt.")
@@ -130,24 +133,35 @@ def _validate_upload(uploaded_file, storage_name: str) -> None:
         raise ValidationError("Der MIME-Type passt nicht zum freigegebenen Dateityp.")
     if "/" in storage_name or "\\" in storage_name or storage_name in {".", ".."}:
         raise SuspiciousFileOperation("Ungueltiger Dateipfad.")
+    _validate_file_content(extension, content)
 
 
 def _read_upload(uploaded_file) -> bytes:
+    if uploaded_file.size > settings.WIKI_MAX_ATTACHMENT_SIZE:
+        raise ValidationError("Die Datei ist zu gross.")
+    parts = []
+    total = 0
     chunks = uploaded_file.chunks() if hasattr(uploaded_file, "chunks") else [uploaded_file.read()]
-    return b"".join(chunks)
+    for chunk in chunks:
+        total += len(chunk)
+        if total > settings.WIKI_MAX_ATTACHMENT_SIZE:
+            raise ValidationError("Die Datei ist zu gross.")
+        parts.append(chunk)
+    return b"".join(parts)
 
 
 def _content_type(uploaded_file, storage_name: str) -> str:
-    explicit = getattr(uploaded_file, "content_type", "") or ""
+    explicit = (getattr(uploaded_file, "content_type", "") or "").split(";", 1)[0].lower()
     guessed, _ = mimetypes.guess_type(storage_name)
     return explicit or guessed or "application/octet-stream"
 
 
 def _write_binary(path: Path, content: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_parent(path, settings.WIKI_STORAGE_ROOT)
     tmp_path = path.with_name(f".{path.name}.tmp")
     with tmp_path.open("wb") as handle:
         handle.write(content)
+    secure_private_file(tmp_path)
     os.replace(tmp_path, path)
 
 
@@ -167,11 +181,12 @@ def _write_meta(attachment: Attachment, timestamp) -> None:
         "updated_by_username": getattr(attachment.updated_by, "username", ""),
     }
     path = attachment_meta_path(attachment)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_parent(path, settings.WIKI_STORAGE_ROOT)
     tmp_path = path.with_name(f".{path.name}.tmp")
     with tmp_path.open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
         handle.write("\n")
+    secure_private_file(tmp_path)
     os.replace(tmp_path, path)
 
 
@@ -191,3 +206,34 @@ def _safe_storage_path(*parts: str) -> Path:
 
 def _is_saved_user(user) -> bool:
     return bool(getattr(user, "is_authenticated", False) and getattr(user, "pk", None))
+
+
+def _validate_file_content(extension: str, content: bytes) -> None:
+    if not content:
+        raise ValidationError("Leere Dateien sind nicht erlaubt.")
+    if extension == ".pdf" and b"%PDF-" not in content[:1024]:
+        raise ValidationError("Die Datei ist kein gueltiges PDF.")
+    if extension == ".docx":
+        _validate_office_archive(content, {"[Content_Types].xml", "word/document.xml"})
+    if extension == ".xlsx":
+        _validate_office_archive(content, {"[Content_Types].xml", "xl/workbook.xml"})
+    if extension in {".txt", ".md", ".html"} and b"\x00" in content:
+        raise ValidationError("Textdateien duerfen keine Nullbytes enthalten.")
+
+
+def _validate_office_archive(content: bytes, required_names: set[str]) -> None:
+    try:
+        with ZipFile(BytesIO(content)) as archive:
+            entries = archive.infolist()
+    except BadZipFile as exc:
+        raise ValidationError("Die Office-Datei ist kein gueltiges ZIP-Archiv.") from exc
+
+    if len(entries) > settings.WIKI_MAX_ARCHIVE_MEMBERS:
+        raise ValidationError("Die Office-Datei enthaelt zu viele Archiveintraege.")
+    if sum(entry.file_size for entry in entries) > settings.WIKI_MAX_ARCHIVE_UNCOMPRESSED_SIZE:
+        raise ValidationError("Die Office-Datei ist entpackt zu gross.")
+    if any(entry.flag_bits & 0x1 for entry in entries):
+        raise ValidationError("Verschluesselte Office-Dateien sind nicht erlaubt.")
+    names = {entry.filename for entry in entries}
+    if not required_names.issubset(names):
+        raise ValidationError("Die Office-Datei hat keine gueltige Struktur.")

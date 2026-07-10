@@ -27,18 +27,27 @@
 - Registrierung kann im Adminbereich deaktiviert oder auf Admin-Freigabe, E-Mail-Bestaetigung oder automatische Aktivierung gesetzt werden.
 - Registrierungsformulare nutzen Honeypot, Mindestzeit und ein persistentes IP-Rate-Limit.
 - Fehlgeschlagene Logins werden pro IP begrenzt; erfolgreiche Logins setzen den Zaehler zurueck.
+- Der Django-Admin-Login leitet auf denselben begrenzten Loginpfad um.
 - Rate-Limit-Schluessel werden mit HMAC pseudonymisiert und enthalten keine lesbaren IP-Adressen.
 - `X-Forwarded-For` wird nur von Eintraegen aus `WIKI_TRUSTED_PROXY_IPS` ausgewertet.
 - E-Mail-Bestaetigungen speichern nur Token-Hashes in MySQL.
 - Die Suche wird ausschliesslich ueber Django ausgeliefert; Browser erhalten keinen direkten Zugriff auf Meilisearch.
 - Suchtreffer werden nach der Meilisearch-Abfrage serverseitig gegen das `view`-Recht des Benutzers gefiltert.
 - CSRF-Schutz bleibt aktiv.
+- Eine Content-Security-Policy und Permissions-Policy werden fuer alle Antworten gesetzt.
+- Topic-JSON ist nach Groesse, Knotenzahl, Textmenge und Verschachtelung begrenzt.
+- Office-Uploads werden als ZIP-Struktur geprueft; PDF-, Archiv-, Seiten- und Zellgrenzen reduzieren Parser-DoS.
+- Neue Storage-Verzeichnisse und Dateien erhalten unter Unix private Rechte (`0700`/`0600`).
 - Auditlogs werden nicht ueber normale Wiki-Funktionen veraendert.
 
 ## Konfiguration
 
 Produktive Werte gehoeren in `.env` oder in sichere Server-Umgebungsvariablen.
 Die Datei `.env.example` enthaelt nur Platzhalter.
+
+`DJANGO_ENVIRONMENT=production` aktiviert sichere Cookies, HTTPS-Weiterleitung
+und HSTS. Der Prozess startet dann nicht mit Entwicklungsschluessel, `DEBUG`,
+Wildcard-Hosts, leerem Meilisearch-Key oder Console-E-Mail-Backend.
 
 Gunicorn oder uWSGI darf nur hinter dem konfigurierten Reverse Proxy erreichbar
 sein. Neue Proxy-Adressen muessen explizit in `WIKI_TRUSTED_PROXY_IPS` stehen.

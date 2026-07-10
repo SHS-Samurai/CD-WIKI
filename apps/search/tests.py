@@ -1,6 +1,8 @@
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -81,6 +83,17 @@ class SearchDocumentTests(TestCase):
 
         self.assertIn("Sichtbar", text)
         self.assertNotIn("geheim", text)
+
+    @override_settings(WIKI_MAX_ARCHIVE_UNCOMPRESSED_SIZE=10)
+    def test_extractor_rejects_large_expanded_archive(self):
+        archive_data = BytesIO()
+        with ZipFile(archive_data, "w", ZIP_DEFLATED) as archive:
+            archive.writestr("[Content_Types].xml", b"x")
+            archive.writestr("word/document.xml", b"mehr als zehn bytes")
+        path = Path(self.tmpdir.name) / "gross.docx"
+        path.write_bytes(archive_data.getvalue())
+
+        self.assertEqual(extract_attachment_text(path, path.name), "")
 
 
 class SearchPermissionTests(TestCase):

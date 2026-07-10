@@ -60,6 +60,16 @@ def system_status() -> dict:
                 "state": "ok" if settings.SESSION_COOKIE_SECURE else "warning",
                 "detail": "aktiv" if settings.SESSION_COOKIE_SECURE else "deaktiviert",
             },
+            {
+                "name": "HTTPS-Weiterleitung",
+                "state": "ok" if settings.SECURE_SSL_REDIRECT else "warning",
+                "detail": "aktiv" if settings.SECURE_SSL_REDIRECT else "deaktiviert",
+            },
+            {
+                "name": "HSTS",
+                "state": "ok" if settings.SECURE_HSTS_SECONDS else "warning",
+                "detail": f"{settings.SECURE_HSTS_SECONDS} Sekunden",
+            },
         ],
         "metrics": dashboard_metrics(),
         "database_name": settings.DATABASES["default"]["NAME"],
@@ -79,6 +89,7 @@ def search_status() -> dict:
         "topic_count": Topic.objects.filter(is_deleted=False).count(),
         "attachment_count": Attachment.objects.filter(is_deleted=False).count(),
         "last_index_update": last_index_update,
+        "master_key_configured": bool(settings.MEILISEARCH.get("MASTER_KEY")),
     }
 
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import SuspiciousFileOperation, ValidationError
@@ -16,6 +17,7 @@ from .storage import (
     load_topic_revision,
     restore_topic_revision,
     save_topic_revision,
+    save_topic_revision_result,
     topic_current_path,
     topic_revision_path,
 )
@@ -93,6 +95,72 @@ class TopicStorageTests(TestCase):
         self.assertEqual(load_topic_revision(topic, 2)["content"], document("Version zwei"))
         self.assertEqual(load_current_topic(topic)["revision"], 2)
 
+    def test_stale_topic_instance_cannot_overwrite_revision(self):
+        topic = create_topic(
+            web=self.web,
+            slug="parallel",
+            title="Parallel",
+            content=document("Version eins"),
+            author=self.author,
+        )
+        first_writer = Topic.objects.get(pk=topic.pk)
+        stale_writer = Topic.objects.get(pk=topic.pk)
+
+        save_topic_revision(topic=first_writer, content=document("Version zwei"), author=self.author)
+        save_topic_revision(topic=stale_writer, content=document("Version drei"), author=self.author)
+
+        topic.refresh_from_db()
+        self.assertEqual(topic.current_revision, 3)
+        self.assertEqual(load_topic_revision(topic, 2)["content"], document("Version zwei"))
+        self.assertEqual(load_topic_revision(topic, 3)["content"], document("Version drei"))
+
+    def test_failed_database_write_restores_revision_files(self):
+        topic = create_topic(
+            web=self.web,
+            slug="rollback",
+            title="Rollback",
+            content=document("Version eins"),
+            author=self.author,
+        )
+
+        with patch("apps.topics.storage.Topic.save", side_effect=RuntimeError("DB-Fehler")):
+            with self.assertRaises(RuntimeError):
+                save_topic_revision(
+                    topic=topic,
+                    content=document("Version zwei"),
+                    author=self.author,
+                )
+
+        topic.refresh_from_db()
+        self.assertEqual(topic.current_revision, 1)
+        self.assertFalse(topic_revision_path(topic, 2).exists())
+        self.assertEqual(load_current_topic(topic)["content"], document("Version eins"))
+
+    def test_failed_audit_callback_rolls_back_revision_files_and_database(self):
+        topic = create_topic(
+            web=self.web,
+            slug="audit-rollback",
+            title="Audit-Rollback",
+            content=document("Version eins"),
+            author=self.author,
+        )
+
+        def fail_audit(*args):
+            raise RuntimeError("Audit-Fehler")
+
+        with self.assertRaises(RuntimeError):
+            save_topic_revision_result(
+                topic=topic,
+                content=document("Version zwei"),
+                author=self.author,
+                after_save=fail_audit,
+            )
+
+        topic.refresh_from_db()
+        self.assertEqual(topic.current_revision, 1)
+        self.assertFalse(topic_revision_path(topic, 2).exists())
+        self.assertEqual(load_current_topic(topic)["content"], document("Version eins"))
+
     def test_restore_old_revision_creates_new_revision(self):
         topic = create_topic(
             web=self.web,
@@ -143,6 +211,35 @@ class TopicStorageTests(TestCase):
                                     "attrs": {"href": "javascript:alert(1)"},
                                 }
                             ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        with self.assertRaises(ValidationError):
+            validate_prosemirror_document(invalid)
+
+    def test_invalid_link_attributes_are_rejected_cleanly(self):
+        invalid = document("Link")
+        invalid["content"][0]["content"][0]["marks"] = [
+            {"type": "link", "attrs": []}
+        ]
+
+        with self.assertRaises(ValidationError):
+            validate_prosemirror_document(invalid)
+
+    @override_settings(WIKI_TOPIC_MAX_DEPTH=2)
+    def test_deeply_nested_content_is_rejected(self):
+        invalid = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "blockquote",
+                    "content": [
+                        {
+                            "type": "blockquote",
+                            "content": [{"type": "paragraph", "content": []}],
                         }
                     ],
                 }

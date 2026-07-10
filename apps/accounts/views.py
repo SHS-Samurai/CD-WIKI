@@ -1,6 +1,9 @@
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.views import LoginView, LogoutView
 from django.shortcuts import redirect, render
+from django.urls import reverse
 
 from apps.audit.models import AuditAction
 from apps.audit.services import write_audit_log
@@ -70,6 +73,12 @@ class AuditedLogoutView(LogoutView):
         if request.user.is_authenticated:
             write_audit_log(action=AuditAction.LOGOUT, request=request)
         return super().post(request, *args, **kwargs)
+
+
+def admin_login_redirect(request):
+    next_url = request.GET.get("next") or request.POST.get("next") or reverse("admin:index")
+    login_url = f"{reverse('login')}?{urlencode({'next': next_url})}"
+    return redirect(login_url)
 
 
 def register(request):

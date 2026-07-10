@@ -238,3 +238,22 @@ class LoginRateLimitTests(TestCase):
         self.assertFalse(RateLimitBucket.objects.exists())
         self.assertTrue(AuditLog.objects.filter(action=AuditAction.LOGIN_SUCCESS).exists())
         self.assertTrue(AuditLog.objects.filter(action=AuditAction.LOGOUT).exists())
+
+    def test_admin_login_redirects_to_rate_limited_login(self):
+        response = self.client.post(
+            reverse("admin:login"),
+            {"username": "alice", "password": "test-password", "next": "/admin/"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, f"{reverse('login')}?next=%2Fadmin%2F")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_security_headers_are_present(self):
+        response = self.client.get(reverse("login"))
+
+        self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
+        self.assertEqual(
+            response.headers["Permissions-Policy"],
+            "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+        )

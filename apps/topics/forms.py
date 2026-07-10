@@ -1,6 +1,7 @@
 import json
 
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
 
 from .content import validate_prosemirror_document
@@ -22,6 +23,7 @@ class TopicForm(forms.Form):
     title = forms.CharField(label="Titel", max_length=180)
     content_json = forms.CharField(
         label="Inhalt JSON",
+        max_length=settings.WIKI_TOPIC_MAX_JSON_SIZE,
         widget=forms.Textarea,
     )
     change_note = forms.CharField(
@@ -43,6 +45,8 @@ class TopicForm(forms.Form):
 
     def clean_content_json(self):
         raw = self.cleaned_data["content_json"]
+        if len(raw) > settings.WIKI_TOPIC_MAX_JSON_SIZE:
+            raise ValidationError("Topic-Inhalt ist zu gross.")
         try:
             document = json.loads(raw)
         except json.JSONDecodeError as exc:

@@ -14,6 +14,21 @@ Gunicorn oder uWSGI nur an eine lokale Adresse binden. Die direkte
 Proxy-Adresse muss in `WIKI_TRUSTED_PROXY_IPS` stehen; bei lokalem Apache sind
 das normalerweise `127.0.0.1` und `::1`.
 
+Produktiv mindestens setzen:
+
+```text
+DJANGO_ENVIRONMENT=production
+DJANGO_DEBUG=False
+DJANGO_ALLOWED_HOSTS=wiki.only-space.de
+DJANGO_CSRF_TRUSTED_ORIGINS=https://wiki.only-space.de
+DJANGO_TRUST_X_FORWARDED_PROTO=True
+DJANGO_SECRET_KEY=<langer zufaelliger Wert>
+MEILISEARCH_MASTER_KEY=<separater zufaelliger Wert>
+DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+```
+
+Vor dem Start `python manage.py check --deploy` gegen diese Umgebung ausfuehren.
+
 ## Suche
 
 Nach Deployment, Migrationen oder groesseren Datenuebernahmen den Suchindex neu

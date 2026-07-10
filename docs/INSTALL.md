@@ -25,6 +25,9 @@ FLUSH PRIVILEGES;
 
 Die Werte muessen in `.env` eingetragen werden.
 
+Lokal bleibt `DJANGO_ENVIRONMENT=development`. Auf dem Zielserver muss der Wert
+`production` sein; die Anwendung verweigert dort unsichere Fallback-Werte.
+
 ## Python
 
 ```powershell

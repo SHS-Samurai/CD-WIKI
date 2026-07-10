@@ -1,4 +1,6 @@
+from io import BytesIO
 from tempfile import TemporaryDirectory
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import SuspiciousFileOperation, ValidationError
@@ -117,6 +119,41 @@ class AttachmentTests(TestCase):
             "notizen.txt",
             b"Text",
             content_type="application/x-msdownload",
+        )
+
+        with self.assertRaises(ValidationError):
+            save_attachment_revision(topic=self.topic, uploaded_file=uploaded_file, author=self.user)
+
+    def test_spoofed_pdf_content_is_rejected(self):
+        uploaded_file = SimpleUploadedFile(
+            "handbuch.pdf",
+            b"kein pdf",
+            content_type="application/pdf",
+        )
+
+        with self.assertRaises(ValidationError):
+            save_attachment_revision(topic=self.topic, uploaded_file=uploaded_file, author=self.user)
+
+    def test_text_file_with_nullbyte_is_rejected(self):
+        uploaded_file = SimpleUploadedFile(
+            "notizen.txt",
+            b"Text\x00Datei",
+            content_type="text/plain",
+        )
+
+        with self.assertRaises(ValidationError):
+            save_attachment_revision(topic=self.topic, uploaded_file=uploaded_file, author=self.user)
+
+    @override_settings(WIKI_MAX_ARCHIVE_UNCOMPRESSED_SIZE=10)
+    def test_office_archive_uncompressed_size_is_limited(self):
+        archive_data = BytesIO()
+        with ZipFile(archive_data, "w", ZIP_DEFLATED) as archive:
+            archive.writestr("[Content_Types].xml", b"x")
+            archive.writestr("word/document.xml", b"mehr als zehn bytes")
+        uploaded_file = SimpleUploadedFile(
+            "handbuch.docx",
+            archive_data.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
 
         with self.assertRaises(ValidationError):

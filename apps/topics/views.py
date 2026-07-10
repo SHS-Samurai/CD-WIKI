@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.core.exceptions import PermissionDenied
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -27,8 +27,8 @@ from .storage import (
     list_topic_revisions,
     load_current_topic,
     load_topic_revision,
-    restore_topic_revision,
-    save_topic_revision,
+    restore_topic_revision_result,
+    save_topic_revision_result,
 )
 
 
@@ -46,26 +46,25 @@ def topic_create(request, web_slug):
         form = TopicForm(request.POST)
         if form.is_valid():
             try:
-                with transaction.atomic():
-                    topic = create_topic(
-                        web=web,
-                        slug=form.cleaned_data["slug"],
-                        title=form.cleaned_data["title"],
-                        content=form.cleaned_data["content_json"],
-                        author=request.user,
-                        change_note=form.cleaned_data["change_note"],
-                    )
-                    log_topic_revision(
-                        topic=topic,
+                topic = create_topic(
+                    web=web,
+                    slug=form.cleaned_data["slug"],
+                    title=form.cleaned_data["title"],
+                    content=form.cleaned_data["content_json"],
+                    author=request.user,
+                    change_note=form.cleaned_data["change_note"],
+                    after_save=lambda saved_topic: log_topic_revision(
+                        topic=saved_topic,
                         user=request.user,
                         request=request,
                         action=AuditAction.TOPIC_CREATED,
                         old_revision=None,
-                        new_revision=topic.current_revision,
+                        new_revision=saved_topic.current_revision,
                         old_hash="",
-                        new_hash=topic.current_hash,
-                        details={"change_note": topic.change_note},
-                    )
+                        new_hash=saved_topic.current_hash,
+                        details={"change_note": saved_topic.change_note},
+                    ),
+                )
             except (IntegrityError, ValidationError):
                 form.add_error("slug", "Dieser Slug ist in diesem Web bereits vergeben.")
             else:
@@ -100,28 +99,24 @@ def topic_edit(request, web_slug, topic_slug):
     if request.method == "POST":
         form = TopicForm(request.POST, include_slug=False)
         if form.is_valid():
-            old_revision = topic.current_revision
-            old_hash = topic.current_hash
-            with transaction.atomic():
-                topic.title = form.cleaned_data["title"]
-                topic.save(update_fields=["title", "updated_at"])
-                save_topic_revision(
-                    topic=topic,
-                    content=form.cleaned_data["content_json"],
-                    author=request.user,
-                    change_note=form.cleaned_data["change_note"],
-                )
-                log_topic_revision(
-                    topic=topic,
+            result = save_topic_revision_result(
+                topic=topic,
+                content=form.cleaned_data["content_json"],
+                author=request.user,
+                change_note=form.cleaned_data["change_note"],
+                title=form.cleaned_data["title"],
+                after_save=lambda saved_topic, revision_result: log_topic_revision(
+                    topic=saved_topic,
                     user=request.user,
                     request=request,
                     action=AuditAction.TOPIC_UPDATED,
-                    old_revision=old_revision,
-                    new_revision=topic.current_revision,
-                    old_hash=old_hash,
-                    new_hash=topic.current_hash,
-                    details={"change_note": topic.change_note},
-                )
+                    old_revision=revision_result.previous_revision,
+                    new_revision=saved_topic.current_revision,
+                    old_hash=revision_result.previous_hash,
+                    new_hash=saved_topic.current_hash,
+                    details={"change_note": saved_topic.change_note},
+                ),
+            )
             _update_search_index(topic, request, source="topic_updated")
             messages.success(request, "Topic gespeichert.")
             return redirect("topic_detail", web_slug=topic.web.slug, topic_slug=topic.slug)
@@ -187,25 +182,25 @@ def topic_revision_restore(request, web_slug, topic_slug, revision):
         raise PermissionDenied
 
     _safe_load_revision(topic, revision)
-    old_revision = topic.current_revision
-    old_hash = topic.current_hash
-    with transaction.atomic():
-        restore_topic_revision(
-            topic=topic,
-            revision=revision,
-            author=request.user,
-        )
-        log_topic_revision(
-            topic=topic,
+    result = restore_topic_revision_result(
+        topic=topic,
+        revision=revision,
+        author=request.user,
+        after_save=lambda saved_topic, revision_result: log_topic_revision(
+            topic=saved_topic,
             user=request.user,
             request=request,
             action=AuditAction.REVISION_RESTORED,
-            old_revision=old_revision,
-            new_revision=topic.current_revision,
-            old_hash=old_hash,
-            new_hash=topic.current_hash,
-            details={"restored_revision": revision, "change_note": topic.change_note},
-        )
+            old_revision=revision_result.previous_revision,
+            new_revision=saved_topic.current_revision,
+            old_hash=revision_result.previous_hash,
+            new_hash=saved_topic.current_hash,
+            details={
+                "restored_revision": revision,
+                "change_note": saved_topic.change_note,
+            },
+        ),
+    )
     _update_search_index(topic, request, source="revision_restored")
     messages.success(request, "Revision wiederhergestellt.")
     return redirect("topic_detail", web_slug=topic.web.slug, topic_slug=topic.slug)

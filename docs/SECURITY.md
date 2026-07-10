@@ -39,6 +39,10 @@
 - Office-Uploads werden als ZIP-Struktur geprueft; PDF-, Archiv-, Seiten- und Zellgrenzen reduzieren Parser-DoS.
 - Neue Storage-Verzeichnisse und Dateien erhalten unter Unix private Rechte (`0700`/`0600`).
 - Auditlogs werden nicht ueber normale Wiki-Funktionen veraendert.
+- Theme-Werte sind auf feste Farben und Zahlenfelder beschraenkt; freie CSS-Regeln, Selektoren, URLs und CSS-Funktionen werden nicht gespeichert.
+- Theme-Farben muessen ein Kontrastverhaeltnis von mindestens `4,5:1` gegen Seiten- und Oberflaechenfarbe einhalten.
+- Der Theme-Endpunkt liefert nur fest definierte CSS-Variablen, setzt ETag- und Cache-Control-Header und gibt keine vertraulichen Einstellungen aus.
+- Theme-Aenderungen und das Wiederherstellen der Standardwerte schreiben Auditlogs innerhalb derselben Datenbanktransaktion.
 
 ## Konfiguration
 
@@ -48,6 +52,9 @@ Die Datei `.env.example` enthaelt nur Platzhalter.
 `DJANGO_ENVIRONMENT=production` aktiviert sichere Cookies, HTTPS-Weiterleitung
 und HSTS. Der Prozess startet dann nicht mit Entwicklungsschluessel, `DEBUG`,
 Wildcard-Hosts, leerem Meilisearch-Key oder Console-E-Mail-Backend.
+Der Produktionsstandard setzt auch den HSTS-Preload-Header. Vor einer
+abweichenden Einstellung muessen alle Unterdomains von `wiki.only-space.de`
+auf HTTPS geprueft werden.
 
 Gunicorn oder uWSGI darf nur hinter dem konfigurierten Reverse Proxy erreichbar
 sein. Neue Proxy-Adressen muessen explizit in `WIKI_TRUSTED_PROXY_IPS` stehen.

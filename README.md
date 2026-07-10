@@ -60,4 +60,5 @@ python manage.py runserver
 - Kommentare liegen in MySQL, werden serverseitig ueber das Web-Recht `comment` geschuetzt und per Soft-Delete geloescht.
 - Die Suche nutzt Meilisearch als Index, fragt aber nur ueber Django ab; Suchtreffer werden vor der Ausgabe erneut per `view`-Recht gefiltert.
 - Topic- und Attachment-Aenderungen stossen eine fehlertolerante Indexaktualisierung an; ein kompletter Neuaufbau erfolgt mit `python manage.py reindex_search`.
-- Das CSS ist in zentrale Variablen, Grundgestaltung, Layout, Komponenten und Editor-Regeln gegliedert. Globale Theme-Werte werden ausschliesslich im geschuetzten Adminbereich verwaltet; Details stehen in `docs/THEMES.md`.
+- Das CSS ist in zentrale Variablen, Grundgestaltung, Layout, Komponenten und Editor-Regeln gegliedert. Globale Theme-Werte werden ausschliesslich im geschuetzten Adminbereich verwaltet.
+- Linke und rechte Sidebars sind standardmaessig deaktiviert, einzeln aktivierbar und werden bis einschliesslich 1.024 Pixel unter dem Hauptinhalt angeordnet. Details zu Theme, CSS-Variablen und Sidebars stehen in `docs/THEMES.md`.

@@ -29,6 +29,31 @@ Sidebar-Breiten, Rundungen sowie die beiden optionalen Sidebars. Die Aktion
 `Standardwerte wiederherstellen` setzt eine gespeicherte Konfiguration sicher
 auf die eingebauten Standardwerte zurueck.
 
+## Sidebars und Breiten
+
+Beide Sidebars sind im Standard-Theme deaktiviert. Sie koennen einzeln oder
+gemeinsam aktiviert werden:
+
+- nur links: Navigation neben dem Hauptinhalt
+- nur rechts: Werkzeuge neben dem Hauptinhalt
+- beide: Navigation links, Werkzeuge rechts
+- keine: Hauptinhalt ohne Nebenspalten
+
+Auf breiten Ansichten nutzt das Layout CSS Grid. Bis einschliesslich 1.024
+Pixel werden die Sidebars in der Reihenfolge Hauptinhalt, links, rechts unter
+den Inhalt gelegt. Der Hauptinhalt behaelt immer `min-width: 0`; lange Links,
+Code und Tabellen duerfen damit nicht den Seitenviewport verbreitern.
+
+Die Standardbreiten sind 1.120 Pixel fuer Seite und Inhalt sowie je 240 Pixel
+fuer die Sidebars. Werden beide Sidebars dauerhaft genutzt, sollte die
+Seitenbreite im Adminbereich erhoeht werden. Die erlaubten Werte sind:
+
+- Seitenbreite: 960 bis 1.920 Pixel
+- Inhaltsbreite: 560 bis 1.600 Pixel, hoechstens so gross wie die Seite
+- Sidebar-Breiten: jeweils 180 bis 400 Pixel
+- Basis-Schriftgroesse: 14 bis 20 Pixel
+- Rundung: 0 bis 24 Pixel
+
 Farben sind ausschliesslich im Format `#RRGGBB` erlaubt. Masse werden als
 ganze Zahlen innerhalb der Formulargrenzen gespeichert; die CSS-Ausgabe fuegt
 die Einheit `px` selbst hinzu. Freies CSS, Selektoren, URLs und CSS-Funktionen

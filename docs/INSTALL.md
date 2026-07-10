@@ -57,6 +57,24 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+## Theme und Sidebars
+
+Nach dem ersten Staff-Login stehen die globalen Einstellungen unter
+`Admin > Theme-Einstellungen` bereit. Ohne gespeicherten Datensatz verwendet
+das Wiki das sichere Standard-Theme; linke und rechte Sidebar sind dabei
+deaktiviert.
+
+Eine Sidebar kann einzeln oder gemeinsam mit der anderen aktiviert werden.
+Auf Bildschirmen bis einschliesslich 1.024 Pixel erscheint der Hauptinhalt
+zuerst, die aktivierten Sidebars folgen darunter. Fuer zwei gleichzeitig
+aktive Sidebars ist eine groessere Seitenbreite sinnvoll; die Standardwerte
+koennen jederzeit ueber die Admin-Aktion `Standardwerte wiederherstellen`
+zurueckgesetzt werden.
+
+Die Theme-Werte werden in MySQL gespeichert. Freies CSS gibt es nicht. Eine
+vollstaendige Beschreibung der Variablen, Grenzen und manuellen Tests steht in
+`docs/THEMES.md`.
+
 ## Registrierung
 
 Der Startmodus kommt aus `WIKI_REGISTRATION_MODE`. Nach der ersten Nutzung kann

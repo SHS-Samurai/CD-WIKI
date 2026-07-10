@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Wiki{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/wiki.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{% url 'home' %}">Wiki</a>
+        <nav class="top-nav" aria-label="Hauptnavigation">
+            <a href="{% url 'home' %}">Webs</a>
+            <form class="search-form" method="get" action="{% url 'search' %}">
+                <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Suche">
+                <button type="submit">Suchen</button>
+            </form>
+            <a href="{% url 'admin:index' %}">Admin</a>
+            {% if request.user.is_authenticated %}
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit">Logout</button>
+                </form>
+            {% else %}
+                <a href="{% url 'login' %}">Login</a>
+            {% endif %}
+        </nav>
+    </header>
+    <main>
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <div class="message message-{{ message.tags }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

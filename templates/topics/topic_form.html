@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+{% if mode == "create" %}Neues Topic{% else %}{{ topic.title }} bearbeiten{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <h1>{% if mode == "create" %}Neues Topic{% else %}Topic bearbeiten{% endif %}</h1>
+    <form method="post" class="form-stack">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% if form.slug %}
+            <label>
+                Slug
+                {{ form.slug }}
+                {{ form.slug.errors }}
+            </label>
+        {% endif %}
+        <label>
+            Titel
+            {{ form.title }}
+            {{ form.title.errors }}
+        </label>
+        <div class="editor-wrapper" data-wiki-editor>
+            <div class="wiki-editor-shell">
+                <div class="editor-toolbar" role="toolbar" aria-label="Textformatierung">
+                    <button type="button" data-editor-command="paragraph" title="Absatz">P</button>
+                    <button type="button" data-editor-command="heading-1" title="Ueberschrift 1">H1</button>
+                    <button type="button" data-editor-command="heading-2" title="Ueberschrift 2">H2</button>
+                    <button type="button" data-editor-command="bold" title="Fett"><strong>B</strong></button>
+                    <button type="button" data-editor-command="italic" title="Kursiv"><em>I</em></button>
+                    <button type="button" data-editor-command="bullet-list" title="Liste">UL</button>
+                    <button type="button" data-editor-command="ordered-list" title="Nummerierte Liste">OL</button>
+                    <button type="button" data-editor-command="blockquote" title="Zitat">Zitat</button>
+                    <button type="button" data-editor-command="code-block" title="Codeblock">Code</button>
+                    <button type="button" data-editor-command="horizontal-rule" title="Horizontale Linie">HR</button>
+                    <button type="button" data-editor-command="link" title="Link">Link</button>
+                    <button type="button" data-editor-command="wiki-link" title="Interner Wiki-Link">Wiki</button>
+                    <button type="button" data-editor-command="table" title="Tabelle">Tabelle</button>
+                    {% if attachments %}
+                        <label class="attachment-picker">
+                            <span class="visually-hidden">Vorhandenen Anhang einfuegen</span>
+                            <select data-editor-attachment aria-label="Vorhandenen Anhang einfuegen">
+                                <option value="">Anhang</option>
+                                {% for attachment in attachments %}
+                                    <option value="{% url 'attachment_download' web_slug=web.slug topic_slug=topic.slug attachment_id=attachment.pk %}">{{ attachment.original_filename }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                    {% endif %}
+                </div>
+                <div class="editor-surface" data-editor-surface></div>
+            </div>
+            <label class="editor-json-fallback">
+                Inhalt JSON
+                {{ form.content_json }}
+            </label>
+            {{ form.content_json.errors }}
+        </div>
+        <label>
+            Aenderungsnotiz
+            {{ form.change_note }}
+            {{ form.change_note.errors }}
+        </label>
+        <div class="toolbar">
+            <button type="submit">Speichern</button>
+            <a class="button secondary" href="{% if topic %}{% url 'topic_detail' web_slug=web.slug topic_slug=topic.slug %}{% else %}{% url 'web_detail' web_slug=web.slug %}{% endif %}">Abbrechen</a>
+        </div>
+    </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'editor/wiki-editor.js' %}" defer></script>
+{% endblock %}

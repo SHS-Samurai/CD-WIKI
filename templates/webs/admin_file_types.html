@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Dateitypen{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div><h1>Dateitypen</h1><p class="meta">Maximale Dateigroesse: {{ max_size_mb }} MB</p></div>
+    <a class="button secondary" href="{% url 'web_detail' web_slug=web.slug %}">Admin</a>
+</div>
+
+<table class="data-table">
+    <thead><tr><th>Endung</th><th>Erlaubte MIME-Typen</th></tr></thead>
+    <tbody>
+        {% for item in allowed %}
+            <tr><td><code>{{ item.extension }}</code></td><td>{{ item.mime_types|join:", " }}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2>Gesperrte Endungen</h2>
+<p>{% for extension in blocked %}<code>{{ extension }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+{% endblock %}

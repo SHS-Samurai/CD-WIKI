@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Erweiterungen{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div><h1>Erweiterungen</h1><p class="meta">Registrierte Wiki-Erweiterungen</p></div>
+    <a class="button secondary" href="{% url 'web_detail' web_slug=web.slug %}">Admin</a>
+</div>
+
+{% if installed %}
+    <ul class="list">
+        {% for extension in installed %}<li class="list-item"><strong>{{ extension.verbose_name }}</strong><span class="meta">{{ extension.name }}</span></li>{% endfor %}
+    </ul>
+{% else %}
+    <p>Keine Erweiterungen installiert.</p>
+{% endif %}
+
+<h2>Verfuegbare Hooks</h2>
+<ul class="code-list">
+    {% for hook in hooks %}<li><code>{{ hook }}</code></li>{% endfor %}
+</ul>
+{% endblock %}

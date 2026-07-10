@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>Admin</h1>
+        <p class="meta">Geschuetztes Web</p>
+    </div>
+</div>
+
+<div class="status-grid" aria-label="Systemuebersicht">
+    <div class="status-metric"><strong>{{ metrics.user_count }}</strong><span>Benutzer</span></div>
+    <div class="status-metric"><strong>{{ metrics.web_count }}</strong><span>Webs</span></div>
+    <div class="status-metric"><strong>{{ metrics.topic_count }}</strong><span>Topics</span></div>
+    <div class="status-metric"><strong>{{ metrics.attachment_count }}</strong><span>Anhaenge</span></div>
+</div>
+
+<ul class="list">
+    <li><a class="list-item" href="{% url 'admin:index' %}"><strong>Startseite</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin:accounts_user_changelist' %}"><strong>Benutzer</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin:auth_group_changelist' %}"><strong>Gruppen</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin:webs_web_changelist' %}"><strong>Webs</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin:webs_webpermission_changelist' %}"><strong>Rechte</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin:audit_auditlog_changelist' %}"><strong>Systemlog</strong></a></li>
+    <li><a class="list-item" href="{% url 'topic_trash' %}"><strong>Topic-Papierkorb</strong></a></li>
+    <li><a class="list-item" href="{% url 'attachment_trash' %}"><strong>Dateianhang-Papierkorb</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin:accounts_registrationsettings_changelist' %}"><strong>Registrierung</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin_search_status' %}"><strong>Suche</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin_file_types' %}"><strong>Dateitypen</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin_extensions' %}"><strong>Erweiterungen</strong></a></li>
+    <li><a class="list-item" href="{% url 'admin_system_status' %}"><strong>Systemstatus</strong></a></li>
+</ul>
+{% endblock %}

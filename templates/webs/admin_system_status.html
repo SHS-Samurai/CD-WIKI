@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Systemstatus{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div><h1>Systemstatus</h1><p class="meta">Datenbank: {{ database_name }}</p></div>
+    <a class="button secondary" href="{% url 'web_detail' web_slug=web.slug %}">Admin</a>
+</div>
+
+<div class="status-grid">
+    <div class="status-metric"><strong>{{ metrics.user_count }}</strong><span>Benutzer</span></div>
+    <div class="status-metric"><strong>{{ metrics.web_count }}</strong><span>Webs</span></div>
+    <div class="status-metric"><strong>{{ metrics.topic_count }}</strong><span>Topics</span></div>
+    <div class="status-metric"><strong>{{ metrics.active_rate_limits }}</strong><span>Aktive Sperren</span></div>
+</div>
+
+<div class="status-list">
+    {% for check in checks %}
+        <div class="status-row">
+            <span class="status-indicator status-{{ check.state }}">{{ check.state }}</span>
+            <strong>{{ check.name }}</strong>
+            <span class="meta">{{ check.detail }}</span>
+        </div>
+    {% endfor %}
+</div>
+
+<p><strong>Registrierung:</strong> {{ metrics.registration_mode }}</p>
+<p><strong>E-Mail-Backend:</strong> <code>{{ email_backend }}</code></p>
+{% endblock %}

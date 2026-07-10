@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}{{ topic.title }}{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>{{ topic.title }}</h1>
+        <p class="meta">
+            {{ web.slug }}/{{ topic.slug }}
+            &middot; Revision {{ topic.current_revision }}
+            {% if topic.last_edited_by %} &middot; {{ topic.last_edited_by.username }}{% endif %}
+            {% if topic.last_edited_at %} &middot; {{ topic.last_edited_at|date:"d.m.Y H:i" }}{% endif %}
+        </p>
+    </div>
+    <div class="toolbar-actions">
+        <a class="button secondary" href="{% url 'topic_revisions' web_slug=web.slug topic_slug=topic.slug %}">Historie</a>
+        {% if can_edit %}
+            <a class="button" href="{% url 'topic_edit' web_slug=web.slug topic_slug=topic.slug %}">Bearbeiten</a>
+        {% endif %}
+        {% if can_delete %}
+            <form method="post" action="{% url 'topic_delete' web_slug=web.slug topic_slug=topic.slug %}">
+                {% csrf_token %}
+                <button class="danger" type="submit">In Papierkorb</button>
+            </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if topic.change_note %}
+    <p class="meta">{{ topic.change_note }}</p>
+{% endif %}
+
+<article class="topic-body">
+    {{ content_html }}
+</article>
+
+<section class="panel">
+    <div class="toolbar">
+        <h2>Dateianhaenge</h2>
+        {% if can_upload %}
+            <a class="button" href="{% url 'attachment_upload' web_slug=web.slug topic_slug=topic.slug %}">Datei hochladen</a>
+        {% endif %}
+    </div>
+
+    {% if attachments %}
+        <ul class="list">
+            {% for attachment in attachments %}
+                <li class="list-item">
+                    <div class="toolbar compact">
+                        <div>
+                            <a href="{% url 'attachment_download' web_slug=web.slug topic_slug=topic.slug attachment_id=attachment.id %}">
+                                <strong>{{ attachment.original_filename }}</strong>
+                            </a>
+                            <p class="meta">Revision {{ attachment.current_revision }} &middot; {{ attachment.size }} Bytes</p>
+                        </div>
+                        {% if can_delete %}
+                            <form method="post" action="{% url 'attachment_delete' web_slug=web.slug topic_slug=topic.slug attachment_id=attachment.id %}">
+                                {% csrf_token %}
+                                <button class="danger" type="submit">In Papierkorb</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Keine Dateianhaenge vorhanden.</p>
+    {% endif %}
+</section>
+
+<section class="panel">
+    <div class="toolbar">
+        <h2>Kommentare</h2>
+    </div>
+
+    {% if comments %}
+        <ul class="list">
+            {% for comment in comments %}
+                <li class="comment">
+                    {% if comment.is_deleted %}
+                        <p><em>Kommentar geloescht.</em></p>
+                        <p class="meta">
+                            {% if comment.deleted_by %}{{ comment.deleted_by.username }}{% else %}System{% endif %}
+                            {% if comment.deleted_at %} &middot; {{ comment.deleted_at|date:"d.m.Y H:i" }}{% endif %}
+                        </p>
+                    {% else %}
+                        <p class="comment-body">{{ comment.body|linebreaksbr }}</p>
+                        <div class="toolbar compact">
+                            <p class="meta">
+                                {% if comment.author_username %}{{ comment.author_username }}{% else %}Gast{% endif %}
+                                &middot; {{ comment.created_at|date:"d.m.Y H:i" }}
+                            </p>
+                            {% if can_delete_comments %}
+                                <form method="post" action="{% url 'comment_delete' web_slug=web.slug topic_slug=topic.slug comment_id=comment.id %}">
+                                    {% csrf_token %}
+                                    <button class="secondary" type="submit">Loeschen</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Keine Kommentare vorhanden.</p>
+    {% endif %}
+
+    {% if can_comment %}
+        <form class="form-stack" method="post" action="{% url 'comment_create' web_slug=web.slug topic_slug=topic.slug %}">
+            {% csrf_token %}
+            {{ comment_form.non_field_errors }}
+            <label>
+                {{ comment_form.body.label }}
+                {{ comment_form.body }}
+                {{ comment_form.body.errors }}
+            </label>
+            <button type="submit">Kommentar speichern</button>
+        </form>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Dateianhang-Papierkorb{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>Dateianhang-Papierkorb</h1>
+        <p class="meta">Geloeschte Dateianhaenge koennen hier wiederhergestellt werden.</p>
+    </div>
+    <a class="button secondary" href="{% url 'web_detail' web_slug='admin' %}">Admin</a>
+</div>
+
+{% if attachments %}
+    <ul class="list">
+        {% for attachment in attachments %}
+            <li class="list-item">
+                <div class="toolbar compact">
+                    <div>
+                        <strong>{{ attachment.original_filename }}</strong>
+                        <p class="meta">
+                            {{ attachment.topic.wiki_path }}
+                            &middot; Revision {{ attachment.current_revision }}
+                            &middot; {{ attachment.size }} Bytes
+                            {% if attachment.updated_by %} &middot; {{ attachment.updated_by.username }}{% endif %}
+                        </p>
+                    </div>
+                    <form method="post" action="{% url 'attachment_restore' attachment_id=attachment.id %}">
+                        {% csrf_token %}
+                        <button type="submit">Wiederherstellen</button>
+                    </form>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>Keine geloeschten Dateianhaenge vorhanden.</p>
+{% endif %}
+{% endblock %}

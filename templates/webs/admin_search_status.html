@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Suchstatus{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div><h1>Suche</h1><p class="meta">Meilisearch und Index</p></div>
+    <a class="button secondary" href="{% url 'web_detail' web_slug=web.slug %}">Admin</a>
+</div>
+
+<div class="status-list">
+    <div class="status-row">
+        <span class="status-indicator status-{{ health.state }}">{{ health.state }}</span>
+        <strong>Meilisearch</strong>
+        <span class="meta">{{ health.detail }}</span>
+    </div>
+</div>
+
+<dl class="definition-list">
+    <dt>Adresse</dt><dd><code>{{ url }}</code></dd>
+    <dt>Index</dt><dd><code>{{ index_name }}</code></dd>
+    <dt>Aktive Topics</dt><dd>{{ topic_count }}</dd>
+    <dt>Aktive Anhaenge</dt><dd>{{ attachment_count }}</dd>
+    <dt>Letzte Index-Aktualisierung</dt>
+    <dd>{% if last_index_update %}{{ last_index_update.created_at }}{% else %}Noch nicht protokolliert{% endif %}</dd>
+</dl>
+{% endblock %}

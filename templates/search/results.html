@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Suche{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>Suche</h1>
+        {% if query %}
+            <p class="meta">Ergebnisse fuer "{{ query }}"</p>
+        {% endif %}
+    </div>
+</div>
+
+<form class="form-stack search-page-form" method="get" action="{% url 'search' %}">
+    <label>
+        Suchbegriff
+        <input type="search" name="q" value="{{ query }}" required>
+    </label>
+    <button type="submit">Suchen</button>
+</form>
+
+{% if query %}
+    {% if results %}
+        <ul class="list">
+            {% for result in results %}
+                <li>
+                    <a class="list-item" href="{% url 'topic_detail' web_slug=result.topic.web.slug topic_slug=result.topic.slug %}">
+                        <strong>{{ result.topic.title }}</strong>
+                        <span class="meta">
+                            {{ result.topic.wiki_path }}
+                            &middot; Revision {{ result.topic.current_revision }}
+                            {% if result.topic.last_edited_by %} &middot; {{ result.topic.last_edited_by.username }}{% endif %}
+                        </span>
+                        {% if result.hit.content_text %}
+                            <span class="search-snippet">{{ result.hit.content_text|truncatechars:220 }}</span>
+                        {% elif result.hit.attachment_text %}
+                            <span class="search-snippet">{{ result.hit.attachment_text|truncatechars:220 }}</span>
+                        {% endif %}
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Keine Treffer gefunden.</p>
+    {% endif %}
+{% endif %}
+{% endblock %}

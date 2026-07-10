@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Topic-Papierkorb{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>Topic-Papierkorb</h1>
+        <p class="meta">Geloeschte Topics koennen hier wiederhergestellt werden.</p>
+    </div>
+    <a class="button secondary" href="{% url 'web_detail' web_slug='admin' %}">Admin</a>
+</div>
+
+{% if topics %}
+    <ul class="list">
+        {% for topic in topics %}
+            <li class="list-item">
+                <div class="toolbar compact">
+                    <div>
+                        <strong>{{ topic.title }}</strong>
+                        <p class="meta">
+                            {{ topic.wiki_path }}
+                            &middot; Revision {{ topic.current_revision }}
+                            {% if topic.last_edited_by %} &middot; {{ topic.last_edited_by.username }}{% endif %}
+                        </p>
+                    </div>
+                    <form method="post" action="{% url 'topic_restore' topic_id=topic.id %}">
+                        {% csrf_token %}
+                        <button type="submit">Wiederherstellen</button>
+                    </form>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>Keine geloeschten Topics vorhanden.</p>
+{% endif %}
+{% endblock %}

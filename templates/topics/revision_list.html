@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Historie: {{ topic.title }}{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>Historie</h1>
+        <p class="meta">{{ topic.wiki_path }} &middot; aktuelle Revision {{ topic.current_revision }}</p>
+    </div>
+    <a class="button secondary" href="{% url 'topic_detail' web_slug=web.slug topic_slug=topic.slug %}">Zurueck</a>
+</div>
+
+{% if revisions %}
+    <ul class="list">
+        {% for item in revisions %}
+            <li>
+                <a class="list-item" href="{% url 'topic_revision_detail' web_slug=web.slug topic_slug=topic.slug revision=item.revision %}">
+                    <strong>Revision {{ item.revision }}</strong>
+                    <span class="meta">
+                        {{ item.created_at }}
+                        {% if item.author_username %} &middot; {{ item.author_username }}{% endif %}
+                    </span>
+                    {% if item.change_note %}
+                        <span class="search-snippet">{{ item.change_note }}</span>
+                    {% endif %}
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>Keine Revisionen vorhanden.</p>
+{% endif %}
+{% endblock %}

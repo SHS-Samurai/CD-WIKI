@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Webs{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>Webs</h1>
+        <p class="meta">{{ webs|length }} sichtbar</p>
+    </div>
+</div>
+
+{% if webs %}
+    <ul class="list">
+        {% for web in webs %}
+            <li>
+                <a class="list-item" href="{% url 'web_detail' web_slug=web.slug %}">
+                    <strong>{{ web.title }}</strong>
+                    <span class="meta">{{ web.slug }} · {{ web.get_visibility_display }}</span>
+                    {% if web.description %}
+                        <span>{{ web.description }}</span>
+                    {% endif %}
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <section class="panel">
+        <p>Keine Webs sichtbar.</p>
+    </section>
+{% endif %}
+{% endblock %}

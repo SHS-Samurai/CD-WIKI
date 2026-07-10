@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Datei hochladen{% endblock %}
+
+{% block content %}
+<section class="panel narrow">
+    <h1>Datei hochladen</h1>
+    <p class="meta">{{ web.slug }}/{{ topic.slug }}</p>
+    <form method="post" enctype="multipart/form-data" class="form-stack">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <label>
+            Datei
+            {{ form.file }}
+            {{ form.file.errors }}
+        </label>
+        <label>
+            Aenderungsnotiz
+            {{ form.change_note }}
+            {{ form.change_note.errors }}
+        </label>
+        <div class="toolbar">
+            <button type="submit">Hochladen</button>
+            <a class="button secondary" href="{% url 'topic_detail' web_slug=web.slug topic_slug=topic.slug %}">Abbrechen</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

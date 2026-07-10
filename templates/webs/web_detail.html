@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}{{ web.title }}{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>{{ web.title }}</h1>
+        <p class="meta">{{ web.slug }} · {{ web.get_visibility_display }}</p>
+    </div>
+    {% if can_create %}
+        <a class="button" href="{% url 'topic_create' web_slug=web.slug %}">Neues Topic</a>
+    {% endif %}
+</div>
+
+{% if topics %}
+    <ul class="list">
+        {% for topic in topics %}
+            <li>
+                <a class="list-item" href="{% url 'topic_detail' web_slug=web.slug topic_slug=topic.slug %}">
+                    <strong>{{ topic.title }}</strong>
+                    <span class="meta">Revision {{ topic.current_revision }} · {{ topic.slug }}</span>
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <section class="panel">
+        <p>Keine Topics vorhanden.</p>
+    </section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Revision {{ revision.revision }}: {{ topic.title }}{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div>
+        <h1>Revision {{ revision.revision }}</h1>
+        <p class="meta">
+            {{ topic.wiki_path }}
+            &middot; {{ revision.created_at }}
+            {% if revision.author_username %} &middot; {{ revision.author_username }}{% endif %}
+        </p>
+    </div>
+    <div class="toolbar-actions">
+        <a class="button secondary" href="{% url 'topic_revisions' web_slug=web.slug topic_slug=topic.slug %}">Historie</a>
+        <a class="button secondary" href="{% url 'topic_detail' web_slug=web.slug topic_slug=topic.slug %}">Aktuelle Seite</a>
+    </div>
+</div>
+
+{% if revision.change_note %}
+    <p class="meta">{{ revision.change_note }}</p>
+{% endif %}
+
+<article class="topic-body">
+    {{ content_html }}
+</article>
+
+<section class="panel">
+    <h2>Revision wiederherstellen</h2>
+    {% if can_restore %}
+        <p>Die Wiederherstellung erzeugt eine neue Revision. Die Historie bleibt erhalten.</p>
+        <form method="post" action="{% url 'topic_revision_restore' web_slug=web.slug topic_slug=topic.slug revision=revision.revision %}">
+            {% csrf_token %}
+            <button type="submit">Diese Revision wiederherstellen</button>
+        </form>
+    {% else %}
+        <p>Du hast kein Bearbeitungsrecht fuer dieses Web.</p>
+    {% endif %}
+</section>
+{% endblock %}

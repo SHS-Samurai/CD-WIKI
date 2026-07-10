@@ -38,7 +38,11 @@ def _render_node(node: dict):
     if node_type == "hardBreak":
         return mark_safe("<br>")
     if node_type == "table":
-        return format_html("<table><tbody>{}</tbody></table>", _render_children(node))
+        return format_html(
+            '<div class="table-scroll" role="region" aria-label="Tabelle" tabindex="0">'
+            "<table><tbody>{}</tbody></table></div>",
+            _render_children(node),
+        )
     if node_type == "tableRow":
         return format_html("<tr>{}</tr>", _render_children(node))
     if node_type == "tableCell":

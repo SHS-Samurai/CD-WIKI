@@ -8,6 +8,7 @@
     <a class="button secondary" href="{% url 'web_detail' web_slug=web.slug %}">Admin</a>
 </div>
 
+<div class="table-scroll" role="region" aria-label="Dateitypen" tabindex="0">
 <table class="data-table">
     <thead><tr><th>Endung</th><th>Erlaubte MIME-Typen</th></tr></thead>
     <tbody>
@@ -16,6 +17,7 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 
 <h2>Gesperrte Endungen</h2>
 <p>{% for extension in blocked %}<code>{{ extension }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</p>

@@ -7,6 +7,7 @@ from apps.accounts import views as account_views
 from apps.attachments import views as attachment_views
 from apps.comments import views as comment_views
 from apps.search import views as search_views
+from apps.theme import views as theme_views
 from apps.topics import views as topic_views
 from apps.webs import views as web_views
 
@@ -14,6 +15,7 @@ from apps.webs import views as web_views
 urlpatterns = [
     path("", web_views.web_list, name="home"),
     path("search/", search_views.search_view, name="search"),
+    path("theme/active.css", theme_views.active_theme_css, name="theme_css"),
     path(
         "accounts/login/",
         account_views.RateLimitedLoginView.as_view(),

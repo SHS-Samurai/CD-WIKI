@@ -21,6 +21,7 @@ class AuditAction(models.TextChoices):
     COMMENT_CREATED = "comment_created", "Kommentar erstellt"
     COMMENT_DELETED = "comment_deleted", "Kommentar geloescht"
     SEARCH_INDEX_UPDATED = "search_index_updated", "Suchindex aktualisiert"
+    THEME_UPDATED = "theme_updated", "Theme geaendert"
     RATE_LIMIT_BLOCKED = "rate_limit_blocked", "Rate-Limit ausgeloest"
 
 

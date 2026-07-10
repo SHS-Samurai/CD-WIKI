@@ -47,3 +47,8 @@
 - [x] Registrierung und Freigabemodi bauen
 - [x] Login- und Formular-Rate-Limits bauen
 - [x] Admin-Web Statusbereiche ausbauen
+
+## Phase 5 - Theme-System
+
+- [x] Zentrale CSS-Variablen und Layoutstruktur einfuehren
+- [x] Globale Theme-Verwaltung mit Validierung und Auditlog bauen

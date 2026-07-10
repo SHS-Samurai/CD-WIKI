@@ -10,6 +10,7 @@ from apps.webs.models import Web
 
 from .content import extract_text, validate_prosemirror_document
 from .models import Topic
+from .rendering import render_document
 from .storage import (
     content_hash,
     create_topic,
@@ -251,6 +252,33 @@ class TopicStorageTests(TestCase):
 
     def test_extract_text_reads_plain_text_from_document(self):
         self.assertEqual(extract_text(document("Suchtext")), "Suchtext")
+
+    def test_rendered_table_uses_keyboard_accessible_scroll_region(self):
+        table_document = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "table",
+                    "content": [
+                        {
+                            "type": "tableRow",
+                            "content": [
+                                {
+                                    "type": "tableCell",
+                                    "content": [document("Inhalt")["content"][0]],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        rendered = str(render_document(table_document))
+
+        self.assertIn('class="table-scroll"', rendered)
+        self.assertIn('tabindex="0"', rendered)
+        self.assertIn("<table>", rendered)
 
     def test_topic_slug_is_unique_per_web(self):
         Topic.objects.create(web=self.web, slug="same", title="Same")

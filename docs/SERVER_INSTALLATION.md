@@ -16,8 +16,8 @@ Betroffene Dienste:
 
 Betroffene Pfade:
 
-- Anwendung: `/opt/cd-wiki/app`
-- Python-Umgebung: `/opt/cd-wiki/venv`
+- Anwendung und Git-Repository: `/var/www/cd-wiki`
+- Python-Umgebung: `/var/www/cd-wiki/.venv`
 - Geheimnisse: `/etc/cd-wiki/wiki.env`
 - Wiki-Storage: `/var/lib/cd-wiki/storage`
 - statische Dateien: `/var/lib/cd-wiki/static`
@@ -43,22 +43,36 @@ Vor dem Start muessen folgende Punkte erfuellt sein:
 6. Das Repository ist sauber und auf den gewuenschten Commit ausgecheckt.
 
 Der Installer setzt voraus, dass auf dem frischen System noch keine Installation
-unter den genannten Pfaden, keine gleichnamige Datenbank und keine gleichnamigen
-systemd-Dienste existieren. Er bricht sonst ab und ueberschreibt nichts.
+unter den Laufzeitpfaden, keine gleichnamige Datenbank und keine gleichnamigen
+systemd-Dienste existieren. Das Projekt selbst muss bereits vollstaendig und als
+sauberes Git-Repository unter `/var/www/cd-wiki` liegen. Der Installer bricht
+bei Abweichungen ab und ueberschreibt keine bestehende Installation.
+Gleichnamige Systembenutzer sowie vorhandene Meilisearch-, Apache- oder
+MySQL-Konfigurationen werden ebenfalls nicht ersetzt.
 
 ## 1. Projekt laden
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y git
-git clone https://github.com/SHS-Samurai/CD-WIKI.git
-cd CD-WIKI
+sudo git clone https://github.com/SHS-Samurai/CD-WIKI.git /var/www/cd-wiki
+sudo chown -R "$USER":"$USER" /var/www/cd-wiki
+cd /var/www/cd-wiki
 git status --short
 git rev-parse HEAD
 ```
 
 `git status --short` darf nichts ausgeben. Den vollstaendigen Wert von
 `git rev-parse HEAD` spaeter als `EXPECTED_GIT_COMMIT` eintragen.
+
+Wenn die Dateien bereits in `/var/www/cd-wiki` liegen, nicht erneut klonen.
+Stattdessen dort `git status --short` und `git rev-parse HEAD` ausfuehren. Ohne
+das Verzeichnis `.git` ist keine verifizierte Installation moeglich; in diesem
+Fall das Repository frisch in den vorgesehenen Pfad klonen.
+
+Obwohl die Anwendung unter `/var/www` liegt, wird dieses Verzeichnis nicht als
+Apache-`DocumentRoot` freigegeben. Apache liefert nur die getrennt erzeugten
+statischen Dateien aus und leitet Anwendungsaufrufe an Gunicorn weiter.
 
 ## 2. Meilisearch-Version pruefen
 
@@ -74,6 +88,7 @@ Das Skript installiert kein Binary, dessen Pruefsumme abweicht.
 ## 3. Installationskonfiguration anlegen
 
 ```bash
+cd /var/www/cd-wiki
 sudo cp scripts/install.env.example /root/cd-wiki-install.env
 sudo chown root:root /root/cd-wiki-install.env
 sudo chmod 600 /root/cd-wiki-install.env
@@ -94,6 +109,7 @@ Anfuehrungszeichen und keinen Zeilenumbruch enthalten.
 ## 4. Installation starten
 
 ```bash
+cd /var/www/cd-wiki
 sudo bash scripts/install_ubuntu_24_04.sh /root/cd-wiki-install.env
 ```
 
@@ -134,7 +150,7 @@ Betriebspruefungen:
 ```bash
 sudo systemctl status cd-wiki meilisearch mysql apache2
 sudo journalctl -u cd-wiki -u meilisearch --since today
-sudo -u cdwiki /opt/cd-wiki/venv/bin/python /opt/cd-wiki/app/manage.py check --deploy
+sudo -u cdwiki /var/www/cd-wiki/.venv/bin/python /var/www/cd-wiki/manage.py check --deploy
 curl -I https://wiki.only-space.de/
 ```
 

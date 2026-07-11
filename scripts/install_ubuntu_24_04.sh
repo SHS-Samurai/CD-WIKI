@@ -6,8 +6,8 @@ umask 027
 readonly APP_NAME="cd-wiki"
 readonly APP_USER="cdwiki"
 readonly APP_GROUP="cdwiki"
-readonly APP_DIR="/opt/cd-wiki/app"
-readonly VENV_DIR="/opt/cd-wiki/venv"
+readonly APP_DIR="/var/www/cd-wiki"
+readonly VENV_DIR="${APP_DIR}/.venv"
 readonly CONFIG_DIR="/etc/cd-wiki"
 readonly APP_ENV="${CONFIG_DIR}/wiki.env"
 readonly STORAGE_DIR="/var/lib/cd-wiki/storage"
@@ -142,11 +142,26 @@ validate_config_values() {
 }
 
 ensure_fresh_target() {
+    local reserved_path
     [[ ! -e "$INSTALL_MARKER" ]] || die "Die Installation ist bereits abgeschlossen. Verwende --check."
-    [[ ! -e /opt/cd-wiki && ! -e "$CONFIG_DIR" ]] || \
-        die "Zielpfade existieren bereits. Vor erneutem Start Ursache pruefen und kontrolliert zurueckrollen."
+    [[ "$SOURCE_DIR" == "$APP_DIR" ]] || \
+        die "Das Projekt muss vollstaendig unter ${APP_DIR} liegen. Aktuell: ${SOURCE_DIR}"
+    [[ ! -e "$CONFIG_DIR" ]] || \
+        die "${CONFIG_DIR} existiert bereits. Vor erneutem Start Ursache pruefen und kontrolliert zurueckrollen."
+    [[ ! -e "$VENV_DIR" && ! -e "${APP_DIR}/.env" && ! -e "${APP_DIR}/staticfiles" \
+        && ! -e "${APP_DIR}/frontend/editor/node_modules" ]] || \
+        die "Im Projekt liegen bereits Laufzeit- oder Build-Dateien."
     [[ ! -e /etc/systemd/system/cd-wiki.service && ! -e /etc/systemd/system/meilisearch.service ]] || \
         die "Eine der vorgesehenen systemd-Units existiert bereits."
+    for reserved_path in \
+        "$APACHE_SITE" /etc/mysql/mysql.conf.d/cd-wiki.cnf "$MEILI_ENV" \
+        /usr/local/bin/meilisearch "$MEILI_DATA_DIR"; do
+        [[ ! -e "$reserved_path" ]] || die "Reservierter Zielpfad existiert bereits: ${reserved_path}"
+    done
+    ! getent passwd "$APP_USER" >/dev/null || die "Systembenutzer ${APP_USER} existiert bereits."
+    ! getent group "$APP_GROUP" >/dev/null || die "Systemgruppe ${APP_GROUP} existiert bereits."
+    ! getent passwd "$MEILI_USER" >/dev/null || die "Systembenutzer ${MEILI_USER} existiert bereits."
+    ! getent group "$MEILI_GROUP" >/dev/null || die "Systemgruppe ${MEILI_GROUP} existiert bereits."
     [[ -f "${SOURCE_DIR}/manage.py" && -f "${SOURCE_DIR}/static/editor/wiki-editor.js" ]] || \
         die "Projektquelle oder gebautes Editor-Bundle fehlt."
     command -v git >/dev/null || die "Git wird fuer die Commit-Pruefung benoetigt."
@@ -176,7 +191,7 @@ install_packages() {
     apt-get install -y --no-install-recommends \
         apache2 ca-certificates certbot curl default-libmysqlclient-dev \
         build-essential git mysql-server pkg-config python3 python3-dev python3-pip \
-        python3-venv python3-certbot-apache rsync
+        python3-venv python3-certbot-apache
     systemctl enable --now mysql apache2
 
     cat > /etc/mysql/mysql.conf.d/cd-wiki.cnf <<'EOF'
@@ -226,7 +241,6 @@ create_accounts_and_paths() {
     addgroup --system "$MEILI_GROUP"
     adduser --system --ingroup "$MEILI_GROUP" --home /nonexistent --no-create-home --shell /usr/sbin/nologin "$MEILI_USER"
 
-    install -d -o root -g root -m 0755 /opt/cd-wiki
     install -d -o root -g root -m 0755 /var/lib/cd-wiki
     install -d -o root -g "$APP_GROUP" -m 0750 "$APP_DIR" "$CONFIG_DIR"
     install -d -o "$APP_USER" -g "$APP_GROUP" -m 0750 "$STORAGE_DIR"
@@ -235,13 +249,10 @@ create_accounts_and_paths() {
     install -d -o "$MEILI_USER" -g "$MEILI_GROUP" -m 0750 \
         "$MEILI_DATA_DIR/data" "$MEILI_DATA_DIR/dumps" "$MEILI_DATA_DIR/snapshots"
 
-    rsync -a \
-        --exclude '.git/' --exclude '.env' --exclude '.venv/' --exclude 'node_modules/' \
-        --exclude 'storage/' --exclude 'logs/' --exclude 'staticfiles/' \
-        "${SOURCE_DIR}/" "${APP_DIR}/"
     chown -R root:"$APP_GROUP" "$APP_DIR"
     find "$APP_DIR" -type d -exec chmod 0750 {} +
-    find "$APP_DIR" -type f -exec chmod 0640 {} +
+    find "$APP_DIR" -type f -perm /111 -exec chmod 0750 {} +
+    find "$APP_DIR" -type f ! -perm /111 -exec chmod 0640 {} +
 }
 
 install_meilisearch() {
@@ -342,6 +353,10 @@ install_python_application() {
     python3 -m venv "$VENV_DIR"
     "$VENV_DIR/bin/python" -m pip install --upgrade pip
     "$VENV_DIR/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
+    chown -R root:"$APP_GROUP" "$VENV_DIR"
+    find "$VENV_DIR" -type d -exec chmod 0750 {} +
+    find "$VENV_DIR" -type f -perm /111 -exec chmod 0750 {} +
+    find "$VENV_DIR" -type f ! -perm /111 -exec chmod 0640 {} +
 
     mysqldump --protocol=socket --single-transaction --no-tablespaces \
         --routines --triggers --events --hex-blob "$DB_NAME" \

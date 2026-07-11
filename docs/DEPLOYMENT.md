@@ -71,8 +71,8 @@ ueber Django und filtert Ergebnisse nach Web-Rechten.
 
 ## Pfade
 
-- Projektverzeichnis: nach Serverkonzept festlegen
-- Virtualenv: im Projekt oder unter `/opt`
+- Projektverzeichnis: `/var/www/cd-wiki`, nicht direkt durch Apache ausliefern
+- Virtualenv: `/var/www/cd-wiki/.venv`
 - Storage: ausserhalb direkt oeffentlicher Webpfade
 - Logs: projektbezogen und nicht oeffentlich
 

@@ -116,18 +116,23 @@ sudo bash scripts/install_ubuntu_24_04.sh /root/cd-wiki-install.env
 Das Skript fuehrt in dieser Reihenfolge aus:
 
 1. Betriebssystem, Konfigurationsrechte, Commit, Arbeitsbaum und Ports pruefen.
-2. Ubuntu-Pakete installieren und MySQL sowie Apache starten.
+2. Ubuntu-Pakete installieren, vorhandenes Django erkennen und MySQL sowie Apache starten.
 3. Per Certbot und ACME-Webroot ein TLS-Zertifikat beziehen.
 4. getrennte Systembenutzer und geschuetzte Verzeichnisse erstellen.
 5. Meilisearch herunterladen und die angegebene SHA-256-Pruefsumme pruefen.
 6. Datenbank, zufaellige Anwendungsschluessel und geschuetzte Env-Dateien anlegen.
-7. Python-Umgebung, Migrationen, statische Dateien und ersten Administrator anlegen.
+7. isolierte Python-Umgebung anlegen, Django 5.2.x pruefen, Migrationen,
+   statische Dateien und ersten Administrator anlegen.
 8. gehaertete systemd-Dienste und Apache-Reverse-Proxy aktivieren.
 9. Django-Deployment-Check, Suche, Dienste, HTTPS und Zertifikatserneuerung testen.
 
 Das Editor-Bundle liegt versioniert in `static/editor/wiki-editor.js`. Auf dem
 Produktivserver wird daher weder Node.js installiert noch ein Frontend-Build
 ausgefuehrt.
+
+Eine eventuell systemweit installierte Django-Version wird nur gemeldet und
+nicht verwendet. Fuer den Wiki-Dienst gilt ausschliesslich die durch
+`requirements.txt` festgelegte Version in `/var/www/cd-wiki/.venv`.
 
 Nach erfolgreichem Abschluss die temporaere Konfiguration entfernen, weil sie
 SMTP- und Admin-Passwort enthaelt:

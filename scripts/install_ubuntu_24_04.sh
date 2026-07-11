@@ -184,6 +184,15 @@ run_manage() {
     runuser -u "$APP_USER" -- "$VENV_DIR/bin/python" "$APP_DIR/manage.py" "$@"
 }
 
+check_system_django() {
+    local version
+    if version=$(python3 -c 'import django; print(django.get_version())' 2>/dev/null); then
+        log "Django ${version} ist systemweit vorhanden; verwendet wird trotzdem die isolierte Projektumgebung."
+    else
+        log "Django ist systemweit nicht installiert und wird in der isolierten Projektumgebung eingerichtet."
+    fi
+}
+
 install_packages() {
     log "Installiere Ubuntu-Pakete."
     export DEBIAN_FRONTEND=noninteractive
@@ -201,6 +210,7 @@ mysqlx-bind-address=127.0.0.1
 local-infile=0
 EOF
     systemctl restart mysql
+    check_system_django
 }
 
 obtain_certificate() {
@@ -349,10 +359,15 @@ SQL
 }
 
 install_python_application() {
+    local django_version
     log "Installiere Python-Abhaengigkeiten und bereite Django vor."
     python3 -m venv "$VENV_DIR"
     "$VENV_DIR/bin/python" -m pip install --upgrade pip
     "$VENV_DIR/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
+    django_version=$("$VENV_DIR/bin/python" -c 'import django; print(django.get_version())')
+    [[ $django_version == 5.2.* ]] || \
+        die "In der Projektumgebung wurde Django ${django_version} statt 5.2.x installiert."
+    log "Django ${django_version} ist in ${VENV_DIR} einsatzbereit."
     chown -R root:"$APP_GROUP" "$VENV_DIR"
     find "$VENV_DIR" -type d -exec chmod 0750 {} +
     find "$VENV_DIR" -type f -perm /111 -exec chmod 0750 {} +

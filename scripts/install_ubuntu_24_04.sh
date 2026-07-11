@@ -197,6 +197,31 @@ validate_config_values() {
     (( ${#ADMIN_PASSWORD} >= 16 )) || die "ADMIN_PASSWORD muss mindestens 16 Zeichen lang sein."
 }
 
+quarantine_uploaded_runtime_files() {
+    local relative_path source_path destination_path
+    local quarantine_dir=""
+    local runtime_paths=(
+        ".venv"
+        ".env"
+        "staticfiles"
+        "frontend/editor/node_modules"
+    )
+
+    for relative_path in "${runtime_paths[@]}"; do
+        source_path="${APP_DIR}/${relative_path}"
+        [[ -e "$source_path" || -L "$source_path" ]] || continue
+        if [[ -z $quarantine_dir ]]; then
+            quarantine_dir="/var/backups/cd-wiki-upload-$(date -u '+%Y%m%dT%H%M%SZ')"
+            install -d -o root -g root -m 0700 "$quarantine_dir"
+            log "Verschiebe mitkopierte Laufzeitdateien nach ${quarantine_dir}."
+        fi
+        destination_path="${quarantine_dir}/${relative_path}"
+        install -d -o root -g root -m 0700 "$(dirname -- "$destination_path")"
+        mv -- "$source_path" "$destination_path"
+        log "Gesichert: ${relative_path}"
+    done
+}
+
 ensure_fresh_target() {
     local reserved_path
     [[ ! -e "$INSTALL_MARKER" ]] || die "Die Installation ist bereits abgeschlossen. Verwende --check."
@@ -204,9 +229,7 @@ ensure_fresh_target() {
         die "Das Projekt muss vollstaendig unter ${APP_DIR} liegen. Aktuell: ${SOURCE_DIR}"
     [[ ! -e "$CONFIG_DIR" ]] || \
         die "${CONFIG_DIR} existiert bereits. Vor erneutem Start Ursache pruefen und kontrolliert zurueckrollen."
-    [[ ! -e "$VENV_DIR" && ! -e "${APP_DIR}/.env" && ! -e "${APP_DIR}/staticfiles" \
-        && ! -e "${APP_DIR}/frontend/editor/node_modules" ]] || \
-        die "Im Projekt liegen bereits Laufzeit- oder Build-Dateien."
+    quarantine_uploaded_runtime_files
     [[ ! -e /etc/systemd/system/cd-wiki.service && ! -e /etc/systemd/system/meilisearch.service ]] || \
         die "Eine der vorgesehenen systemd-Units existiert bereits."
     for reserved_path in \

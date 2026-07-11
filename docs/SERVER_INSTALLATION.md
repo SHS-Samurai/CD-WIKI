@@ -70,6 +70,12 @@ Der Installer kann vollstaendig hochgeladene Projektdateien auch ohne das
 Verzeichnis `.git` installieren. Git wird fuer spaetere, nachvollziehbare Updates
 dennoch empfohlen.
 
+Mitkopierte lokale Laufzeit- oder Build-Verzeichnisse wie `.venv`, `.env`,
+`staticfiles` und `frontend/editor/node_modules` werden vor der Installation
+nicht geloescht. Der Installer verschiebt sie automatisch in ein zeitgestempeltes,
+nur fuer root lesbares Verzeichnis unter `/var/backups` und erstellt die fuer
+Ubuntu benoetigten Dateien anschliessend neu.
+
 Obwohl die Anwendung unter `/var/www` liegt, wird dieses Verzeichnis nicht als
 Apache-`DocumentRoot` freigegeben. Apache liefert nur die getrennt erzeugten
 statischen Dateien aus und leitet Anwendungsaufrufe an Gunicorn weiter.

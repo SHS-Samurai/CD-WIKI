@@ -5,9 +5,10 @@
 Die abgesicherte Erstinstallation fuer Ubuntu 24.04 ist in
 `docs/SERVER_INSTALLATION.md` beschrieben. Anwendungsgeheimnisse liegen auf dem
 Server in `/etc/cd-wiki/wiki.env` mit restriktiven Rechten und nicht im
-Repository. Gunicorn, MySQL und Meilisearch werden nur an Loopback-Adressen
-gebunden. Vor dem produktiven Start sind eine externe Sicherung und ein
-Wiederherstellungstest erforderlich.
+Repository. Django laeuft in einem getrennten Apache-mod_wsgi-Daemon unter dem
+unprivilegierten Benutzer `cdwiki`. MySQL und Meilisearch werden nur an
+Loopback-Adressen gebunden. Vor dem produktiven Start sind eine externe
+Sicherung und ein Wiederherstellungstest erforderlich.
 
 ## Grundregeln
 
@@ -65,5 +66,7 @@ Der Produktionsstandard setzt auch den HSTS-Preload-Header. Vor einer
 abweichenden Einstellung muessen alle Unterdomains von `wiki.only-space.de`
 auf HTTPS geprueft werden.
 
-Gunicorn oder uWSGI darf nur hinter dem konfigurierten Reverse Proxy erreichbar
-sein. Neue Proxy-Adressen muessen explizit in `WIKI_TRUSTED_PROXY_IPS` stehen.
+Apache bindet Django direkt ueber mod_wsgi ein; es gibt keinen separaten
+Anwendungsport. `DJANGO_TRUST_X_FORWARDED_PROTO` ist deaktiviert. Falls spaeter
+ein echter vorgeschalteter Proxy ergaenzt wird, muss er separat geplant und in
+`WIKI_TRUSTED_PROXY_IPS` eingeschraenkt werden.

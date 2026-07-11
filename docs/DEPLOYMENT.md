@@ -1,7 +1,7 @@
 # Deployment
 
-Zielsystem: Ubuntu-VPS mit Apache Reverse Proxy, Gunicorn oder uWSGI, MySQL und
-lokalem Meilisearch-Dienst.
+Zielsystem: Ubuntu-VPS mit Apache und mod_wsgi, MySQL und lokalem
+Meilisearch-Dienst. Gunicorn und uWSGI werden nicht eingesetzt.
 
 Die reproduzierbare Erstinstallation fuer einen frischen Ubuntu-24.04-VPS ist
 in `docs/SERVER_INSTALLATION.md` beschrieben und wird durch
@@ -10,13 +10,13 @@ in `docs/SERVER_INSTALLATION.md` beschrieben und wird durch
 ## Dienste
 
 - Apache auf Port 80/443
-- Gunicorn oder uWSGI lokal, z. B. auf `127.0.0.1:8000`
+- Django im getrennten Apache-mod_wsgi-Daemon unter dem Benutzer `cdwiki`
 - MySQL lokal, Standardport `3306`
 - Meilisearch lokal, Standardport `7700`
 
-Gunicorn oder uWSGI nur an eine lokale Adresse binden. Die direkte
-Proxy-Adresse muss in `WIKI_TRUSTED_PROXY_IPS` stehen; bei lokalem Apache sind
-das normalerweise `127.0.0.1` und `::1`.
+Es gibt keinen Anwendungsport und keinen HTTP-Reverse-Proxy. Apache bindet die
+Django-WSGI-Anwendung direkt ein. `DJANGO_TRUST_X_FORWARDED_PROTO` bleibt daher
+deaktiviert. MySQL und Meilisearch sind ausschliesslich auf Loopback gebunden.
 
 Produktiv mindestens setzen:
 
@@ -25,8 +25,8 @@ DJANGO_ENVIRONMENT=production
 DJANGO_DEBUG=False
 DJANGO_ALLOWED_HOSTS=wiki.only-space.de
 DJANGO_CSRF_TRUSTED_ORIGINS=https://wiki.only-space.de
-DJANGO_TRUST_X_FORWARDED_PROTO=True
-DJANGO_SECURE_HSTS_PRELOAD=True
+DJANGO_TRUST_X_FORWARDED_PROTO=False
+DJANGO_SECURE_HSTS_PRELOAD=False
 DJANGO_SECRET_KEY=<langer zufaelliger Wert>
 MEILISEARCH_MASTER_KEY=<separater zufaelliger Wert>
 DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
@@ -54,8 +54,8 @@ gespeichert, liefert das Wiki weiterhin die statischen Standardwerte.
 Der Theme-Endpunkt `/theme/active.css` ist oeffentlich lesbar, enthaelt aber
 ausschliesslich validierte CSS-Variablen und keine vertraulichen Daten. Die
 letzte Aenderungszeit ist Teil der Stylesheet-URL, damit Theme-Aenderungen
-sofort sichtbar werden. Apache muss diesen Django-Pfad deshalb wie die uebrigen
-Anwendungspfade an Gunicorn oder uWSGI weiterleiten.
+sofort sichtbar werden. Apache uebergibt diesen Django-Pfad wie die uebrigen
+Anwendungspfade direkt an mod_wsgi.
 
 ## Suche
 
@@ -108,6 +108,6 @@ python manage.py prune_rate_limits
 
 - Vor Migrationen Datenbank sichern.
 - Vor Deployment aktuellen Stand taggen oder Commit notieren.
-- Bei Fehlern Code auf vorherigen Commit zuruecksetzen und Dienst neu starten.
+- Bei Fehlern Code auf vorherigen Commit zuruecksetzen und Apache neu starten.
 
 Konkrete Serveraenderungen werden erst nach separater Planung ausgefuehrt.

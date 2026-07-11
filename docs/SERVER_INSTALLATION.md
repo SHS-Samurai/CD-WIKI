@@ -9,7 +9,7 @@ fuer Updates oder fuer die Uebernahme einer vorhandenen Installation.
 Betroffene Dienste:
 
 - Apache auf den oeffentlichen Ports `80` und `443`
-- Gunicorn als `cd-wiki.service` auf `127.0.0.1:8000`
+- Django als getrennter Apache-mod_wsgi-Daemon ohne eigenen Netzwerkport
 - MySQL auf dem lokalen Standardport `3306`
 - Meilisearch als eigener Dienst auf `127.0.0.1:7700`
 - `cd-wiki-maintenance.timer` fuer die taegliche Rate-Limit-Bereinigung
@@ -26,8 +26,11 @@ Betroffene Pfade:
 - lokale Sicherungen vor Migrationen: `/var/backups/cd-wiki`
 
 Das Skript richtet keine Firewall ein. So kann eine abweichende SSH-Konfiguration
-nicht versehentlich ausgesperrt werden. MySQL, Meilisearch und Gunicorn werden
-nur lokal gebunden und duerfen nicht durch Provider-Firewalls freigegeben werden.
+nicht versehentlich ausgesperrt werden. MySQL und Meilisearch werden nur lokal
+gebunden und duerfen nicht durch Provider-Firewalls freigegeben werden.
+Der Meilisearch-Dienst wird per systemd auf maximal 50 Prozent des physischen
+Speichers begrenzt. Der Apache-mod_wsgi-Daemon startet mit einem Prozess, fuenf
+Threads und einem Zeitlimit fuer blockierte Anfragen.
 Fuer MySQL werden `bind-address` und `mysqlx-bind-address` explizit auf
 `127.0.0.1` gesetzt; `local-infile` wird deaktiviert.
 
@@ -80,7 +83,8 @@ Ubuntu benoetigten Dateien anschliessend neu.
 
 Obwohl die Anwendung unter `/var/www` liegt, wird dieses Verzeichnis nicht als
 Apache-`DocumentRoot` freigegeben. Apache liefert nur die getrennt erzeugten
-statischen Dateien aus und leitet Anwendungsaufrufe an Gunicorn weiter.
+statischen Dateien aus und fuehrt Django in einem getrennten mod_wsgi-Daemon
+unter dem unprivilegierten Benutzer `cdwiki` aus.
 
 ## 2. Installation starten
 
@@ -118,8 +122,8 @@ Das Skript fuehrt in dieser Reihenfolge aus:
 7. Datenbank, zufaellige Anwendungsschluessel und geschuetzte Env-Dateien anlegen.
 8. isolierte Python-Umgebung anlegen, Django 5.2.x pruefen, Migrationen,
    statische Dateien und ersten Administrator anlegen.
-9. gehaertete systemd-Dienste und Apache-Reverse-Proxy aktivieren.
-10. Django-Deployment-Check, Suche, Dienste, HTTPS und Zertifikatserneuerung testen.
+9. gehaerteten Meilisearch-Dienst, Wartungstimer und Apache mod_wsgi aktivieren.
+10. Django-Deployment-Check, Suche, Dienste und HTTPS mit Zeitlimits testen.
 
 Das Editor-Bundle liegt versioniert in `static/editor/wiki-editor.js`. Auf dem
 Produktivserver wird daher weder Node.js installiert noch ein Frontend-Build
@@ -146,8 +150,8 @@ Der Check liest nur die bereits geschuetzte Serverkonfiguration. Einzelne
 Betriebspruefungen:
 
 ```bash
-sudo systemctl status cd-wiki meilisearch mysql apache2
-sudo journalctl -u cd-wiki -u meilisearch --since today
+sudo systemctl status meilisearch mysql apache2
+sudo journalctl -u apache2 -u meilisearch --since today
 sudo -u cdwiki /var/www/cd-wiki/.venv/bin/python /var/www/cd-wiki/manage.py check --deploy
 curl -I https://wiki.only-space.de/
 ```

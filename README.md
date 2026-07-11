@@ -14,7 +14,7 @@ Dateianhaenge, Kommentare, Auditlog und Suche robust bereitstellen.
 - MySQL
 - Meilisearch
 - Tiptap / ProseMirror JSON fuer Inhalte
-- Apache Reverse Proxy auf Ubuntu
+- Apache mit mod_wsgi auf Ubuntu
 
 Node.js wird nur fuer den Editor-Build verwendet.
 

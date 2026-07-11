@@ -18,6 +18,7 @@ readonly MEILI_GROUP="meilisearch"
 readonly MEILI_ENV="/etc/meilisearch.env"
 readonly MEILI_DATA_DIR="/var/lib/meilisearch"
 readonly APACHE_SITE="/etc/apache2/sites-available/wiki.only-space.de.conf"
+readonly APACHE_SECURITY_CONF="/etc/apache2/conf-available/cd-wiki-security.conf"
 readonly INSTALL_MARKER="${CONFIG_DIR}/installed"
 readonly DB_NAME="cd-wiki"
 readonly DB_USER="cdwiki"
@@ -247,10 +248,12 @@ ensure_fresh_target() {
     [[ ! -e "$CONFIG_DIR" ]] || \
         die "${CONFIG_DIR} existiert bereits. Vor erneutem Start Ursache pruefen und kontrolliert zurueckrollen."
     quarantine_uploaded_runtime_files
-    [[ ! -e /etc/systemd/system/cd-wiki.service && ! -e /etc/systemd/system/meilisearch.service ]] || \
+    [[ ! -e /etc/systemd/system/meilisearch.service \
+        && ! -e /etc/systemd/system/cd-wiki-maintenance.service \
+        && ! -e /etc/systemd/system/cd-wiki-maintenance.timer ]] || \
         die "Eine der vorgesehenen systemd-Units existiert bereits."
     for reserved_path in \
-        "$APACHE_SITE" /etc/mysql/mysql.conf.d/cd-wiki.cnf "$MEILI_ENV" \
+        "$APACHE_SITE" "$APACHE_SECURITY_CONF" /etc/mysql/mysql.conf.d/cd-wiki.cnf "$MEILI_ENV" \
         /usr/local/bin/meilisearch "$MEILI_DATA_DIR"; do
         [[ ! -e "$reserved_path" ]] || die "Reservierter Zielpfad existiert bereits: ${reserved_path}"
     done
@@ -269,8 +272,8 @@ ensure_fresh_target() {
     else
         log "Hinweis: Kein Git-Metadatenverzeichnis vorhanden; installiere die hochgeladenen Projektdateien."
     fi
-    if ss -ltnH | awk '{print $4}' | grep -Eq '(^|:)8000$|(^|:)7700$'; then
-        die "Port 8000 oder 7700 ist bereits belegt."
+    if ss -ltnH | awk '{print $4}' | grep -Eq '(^|:)7700$'; then
+        die "Port 7700 ist bereits belegt."
     fi
 }
 
@@ -323,9 +326,9 @@ install_packages() {
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get install -y --no-install-recommends \
-        apache2 ca-certificates certbot curl default-libmysqlclient-dev \
+        apache2 ca-certificates certbot curl default-libmysqlclient-dev libapache2-mod-wsgi-py3 \
         build-essential git mysql-server pkg-config python3 python3-dev python3-pip \
-        python3-venv python3-certbot-apache
+        python3-venv
     systemctl enable --now mysql apache2
 
     cat > /etc/mysql/mysql.conf.d/cd-wiki.cnf <<'EOF'
@@ -480,7 +483,7 @@ SQL
     write_env_line "$APP_ENV" DJANGO_SECRET_KEY "$django_secret"
     write_env_line "$APP_ENV" DJANGO_ALLOWED_HOSTS "$DOMAIN"
     write_env_line "$APP_ENV" DJANGO_CSRF_TRUSTED_ORIGINS "https://${DOMAIN}"
-    write_env_line "$APP_ENV" DJANGO_TRUST_X_FORWARDED_PROTO True
+    write_env_line "$APP_ENV" DJANGO_TRUST_X_FORWARDED_PROTO False
     write_env_line "$APP_ENV" DJANGO_SESSION_COOKIE_SECURE True
     write_env_line "$APP_ENV" DJANGO_CSRF_COOKIE_SECURE True
     write_env_line "$APP_ENV" DJANGO_SECURE_SSL_REDIRECT True
@@ -553,7 +556,7 @@ install_python_application() {
 }
 
 install_services() {
-    log "Installiere gehaertete systemd-Dienste."
+    log "Installiere Meilisearch und den Wartungstimer als gehaertete systemd-Dienste."
     cat > /etc/systemd/system/meilisearch.service <<EOF
 [Unit]
 Description=Meilisearch fuer CD-Wiki
@@ -578,38 +581,10 @@ ProtectKernelTunables=true
 ProtectSystem=strict
 ReadWritePaths=${MEILI_DATA_DIR}
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    cat > /etc/systemd/system/cd-wiki.service <<EOF
-[Unit]
-Description=CD-Wiki Gunicorn
-After=network.target mysql.service meilisearch.service
-Requires=mysql.service meilisearch.service
-
-[Service]
-Type=simple
-User=${APP_USER}
-Group=${APP_GROUP}
-WorkingDirectory=${APP_DIR}
-EnvironmentFile=${APP_ENV}
-Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=${VENV_DIR}/bin/gunicorn --bind 127.0.0.1:8000 --workers 3 --timeout 60 --access-logfile - --error-logfile - config.wsgi:application
-Restart=on-failure
-RestartSec=5s
-UMask=0027
-NoNewPrivileges=true
-PrivateDevices=true
-PrivateTmp=true
-ProtectControlGroups=true
-ProtectHome=true
-ProtectKernelModules=true
-ProtectKernelTunables=true
-ProtectSystem=strict
-ReadWritePaths=${STORAGE_DIR}
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryAccounting=true
+MemoryHigh=40%
+MemoryMax=50%
+TasksMax=128
 
 [Install]
 WantedBy=multi-user.target
@@ -650,12 +625,19 @@ EOF
 
     systemctl daemon-reload
     systemctl enable --now meilisearch.service
-    systemctl enable --now cd-wiki.service cd-wiki-maintenance.timer
+    systemctl enable --now cd-wiki-maintenance.timer certbot.timer
 }
 
 configure_apache() {
-    log "Konfiguriere Apache als HTTPS-Reverse-Proxy."
-    a2enmod headers proxy proxy_http rewrite ssl
+    log "Konfiguriere Apache mit mod_wsgi und HTTPS."
+    a2enmod rewrite ssl wsgi
+    cat > "$APACHE_SECURITY_CONF" <<'EOF'
+ServerTokens Prod
+ServerSignature Off
+TraceEnable Off
+WSGIRestrictEmbedded On
+EOF
+    a2enconf cd-wiki-security
     cat > "$APACHE_SITE" <<EOF
 <VirtualHost *:80>
     ServerName ${DOMAIN}
@@ -682,10 +664,6 @@ configure_apache() {
     SSLCertificateKeyFile /etc/letsencrypt/live/${DOMAIN}/privkey.pem
     SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1
 
-    ProxyRequests Off
-    ProxyPreserveHost On
-    RequestHeader set X-Forwarded-Proto "https"
-
     Alias /static/ ${STATIC_DIR}/
     <Directory ${STATIC_DIR}>
         Options -Indexes
@@ -693,9 +671,19 @@ configure_apache() {
         Require all granted
     </Directory>
 
-    ProxyPass /static/ !
-    ProxyPass / http://127.0.0.1:8000/ retry=0 timeout=60
-    ProxyPassReverse / http://127.0.0.1:8000/
+    WSGIDaemonProcess cd-wiki user=${APP_USER} group=${APP_GROUP} threads=5 umask=0027 display-name=%{GROUP} home=${APP_DIR} request-timeout=120 graceful-timeout=15 python-home=${VENV_DIR} python-path=${APP_DIR}
+    WSGIProcessGroup cd-wiki
+    WSGIApplicationGroup %{GLOBAL}
+    WSGIScriptAlias / ${APP_DIR}/config/wsgi.py
+
+    <Directory ${APP_DIR}/config>
+        Options -Indexes
+        AllowOverride None
+        <Files wsgi.py>
+            Require all granted
+        </Files>
+    </Directory>
+
     LimitRequestBody 27262976
 
     ErrorLog \${APACHE_LOG_DIR}/cd-wiki-error.log
@@ -715,16 +703,22 @@ EOF
 }
 
 post_install_checks() {
-    log "Fuehre Produktions- und Erreichbarkeitspruefungen aus."
-    run_manage check --deploy
-    run_manage reindex_search
-    systemctl --quiet is-active mysql meilisearch cd-wiki apache2
-    curl --fail --silent --show-error http://127.0.0.1:7700/health >/dev/null
-    curl --fail --silent --show-error -H "Host: ${DOMAIN}" -H "X-Forwarded-Proto: https" \
-        http://127.0.0.1:8000/ >/dev/null
-    curl --fail --silent --show-error --resolve "${DOMAIN}:443:127.0.0.1" \
+    log "Pruefe Django-Produktionseinstellungen (maximal 120 Sekunden)."
+    timeout 120s runuser -u "$APP_USER" -- \
+        "$VENV_DIR/bin/python" "$APP_DIR/manage.py" check --deploy
+    log "Baue den Suchindex auf (maximal 300 Sekunden)."
+    timeout 300s runuser -u "$APP_USER" -- \
+        "$VENV_DIR/bin/python" "$APP_DIR/manage.py" reindex_search
+    log "Pruefe MySQL, Meilisearch, Apache und Certbot-Timer."
+    systemctl --quiet is-active mysql meilisearch apache2 certbot.timer
+    log "Pruefe Meilisearch auf Loopback."
+    curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+        http://127.0.0.1:7700/health >/dev/null
+    log "Pruefe Django ueber Apache und HTTPS."
+    curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+        --resolve "${DOMAIN}:443:127.0.0.1" \
         "https://${DOMAIN}/" >/dev/null
-    certbot renew --dry-run
+    log "Alle Produktions- und Erreichbarkeitspruefungen waren erfolgreich."
 }
 
 check_installation() {

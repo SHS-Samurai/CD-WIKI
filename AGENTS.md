@@ -21,13 +21,14 @@ Verwenden:
 * MySQL
 * Meilisearch
 * Tiptap / ProseMirror JSON für Wiki-Inhalte
-* Apache Reverse Proxy
+* Apache mit mod_wsgi
 * Ubuntu-VPS
 
 Node.js darf nur für den Editor-Build verwendet werden, nicht als Serverplattform.
 
 Nicht verwenden:
 
+* kein Gunicorn oder uWSGI; Django wird direkt ueber Apache mod_wsgi betrieben
 * kein Java
 * kein Solr
 * kein PHP
@@ -564,8 +565,7 @@ Vorgesehen:
 
 * Python Virtual Environment
 * Django
-* Gunicorn oder uWSGI
-* Apache Reverse Proxy
+* Apache mit mod_wsgi im Daemon-Modus
 * MySQL
 * Meilisearch als lokaler Dienst
 * Storage außerhalb öffentlich direkt erreichbarer Webpfade

@@ -34,6 +34,7 @@ SMTP_PASSWORD=""
 SMTP_USE_TLS="true"
 SMTP_USE_SSL="false"
 DEFAULT_FROM_EMAIL=""
+DJANGO_EMAIL_BACKEND="django.core.mail.backends.dummy.EmailBackend"
 ADMIN_USERNAME=""
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
@@ -127,7 +128,7 @@ prompt_secret() {
 }
 
 collect_installation_values() {
-    local smtp_mode
+    local configure_smtp smtp_mode
     [[ -t 0 ]] || die "Die Erstinstallation benoetigt ein interaktives Terminal."
 
     printf '\nCD-Wiki Erstinstallation\n'
@@ -137,24 +138,34 @@ collect_installation_values() {
     prompt_value ADMIN_EMAIL "Administrator-E-Mail"
     prompt_secret ADMIN_PASSWORD "Administrator-Passwort" 16
     prompt_value LETSENCRYPT_EMAIL "E-Mail fuer Let's Encrypt" "$ADMIN_EMAIL"
-    prompt_value SMTP_HOST "SMTP-Server"
-    prompt_value SMTP_USER "SMTP-Benutzer"
-    prompt_secret SMTP_PASSWORD "SMTP-Passwort"
-    prompt_value smtp_mode "SMTP-Sicherheit (starttls oder ssl)" "starttls"
-    case "${smtp_mode,,}" in
-        starttls)
-            SMTP_USE_TLS=true
-            SMTP_USE_SSL=false
-            prompt_value SMTP_PORT "SMTP-Port" "587"
+    prompt_value configure_smtp "SMTP-Mailversand einrichten? (ja oder nein)" "nein"
+    case "${configure_smtp,,}" in
+        ja)
+            DJANGO_EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend"
+            prompt_value SMTP_HOST "SMTP-Server"
+            prompt_value SMTP_USER "SMTP-Benutzer"
+            prompt_secret SMTP_PASSWORD "SMTP-Passwort"
+            prompt_value smtp_mode "SMTP-Sicherheit (starttls oder ssl)" "starttls"
+            case "${smtp_mode,,}" in
+                starttls)
+                    SMTP_USE_TLS=true
+                    SMTP_USE_SSL=false
+                    prompt_value SMTP_PORT "SMTP-Port" "587"
+                    ;;
+                ssl)
+                    SMTP_USE_TLS=false
+                    SMTP_USE_SSL=true
+                    prompt_value SMTP_PORT "SMTP-Port" "465"
+                    ;;
+                *) die "SMTP-Sicherheit muss starttls oder ssl sein." ;;
+            esac
+            prompt_value DEFAULT_FROM_EMAIL "Absenderadresse" "$SMTP_USER"
             ;;
-        ssl)
-            SMTP_USE_TLS=false
-            SMTP_USE_SSL=true
-            prompt_value SMTP_PORT "SMTP-Port" "465"
+        nein)
+            DEFAULT_FROM_EMAIL="no-reply@${DOMAIN}"
             ;;
-        *) die "SMTP-Sicherheit muss starttls oder ssl sein." ;;
+        *) die "Bitte ja oder nein eingeben." ;;
     esac
-    prompt_value DEFAULT_FROM_EMAIL "Absenderadresse" "$SMTP_USER"
 }
 
 confirm_installation() {
@@ -162,7 +173,11 @@ confirm_installation() {
     printf '\nZusammenfassung:\n'
     printf '  Domain:           %s\n' "$DOMAIN"
     printf '  Administrator:    %s <%s>\n' "$ADMIN_USERNAME" "$ADMIN_EMAIL"
-    printf '  SMTP:             %s:%s\n' "$SMTP_HOST" "$SMTP_PORT"
+    if [[ $DJANGO_EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" ]]; then
+        printf '  SMTP:             %s:%s\n' "$SMTP_HOST" "$SMTP_PORT"
+    else
+        printf '  E-Mail-Versand:   deaktiviert\n'
+    fi
     printf '  Datenbank:        %s\n' "$DB_NAME"
     printf '  Anwendungspfad:   %s\n\n' "$APP_DIR"
     read -r -p "Installation jetzt vollstaendig starten? [ja/NEIN]: " confirmation
@@ -171,8 +186,7 @@ confirm_installation() {
 
 validate_config_values() {
     local required=(
-        DOMAIN LETSENCRYPT_EMAIL SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD
-        DEFAULT_FROM_EMAIL ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
+        DOMAIN LETSENCRYPT_EMAIL DEFAULT_FROM_EMAIL ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
     )
     local name
     for name in "${required[@]}"; do
@@ -185,14 +199,17 @@ validate_config_values() {
     local email_pattern='^[A-Za-z0-9_.+%-]+@[A-Za-z0-9.-]+$'
     [[ $LETSENCRYPT_EMAIL =~ $email_pattern && $ADMIN_EMAIL =~ $email_pattern && $DEFAULT_FROM_EMAIL =~ $email_pattern ]] || \
         die "E-Mail-Adressen sind ungueltig."
-    [[ $SMTP_HOST =~ ^[A-Za-z0-9.-]+$ ]] || die "SMTP_HOST ist ungueltig."
-    [[ $SMTP_USER =~ ^[A-Za-z0-9_.@+%:/=-]+$ ]] || die "SMTP_USER enthaelt ungueltige Zeichen."
-    [[ $SMTP_PORT =~ ^[0-9]+$ ]] || die "SMTP_PORT muss numerisch sein."
-    (( SMTP_PORT >= 1 && SMTP_PORT <= 65535 )) || die "SMTP_PORT liegt ausserhalb des gueltigen Bereichs."
-    [[ ${SMTP_USE_TLS:-true} =~ ^(true|false)$ ]] || die "SMTP_USE_TLS muss true oder false sein."
-    [[ ${SMTP_USE_SSL:-false} =~ ^(true|false)$ ]] || die "SMTP_USE_SSL muss true oder false sein."
-    [[ ! ( ${SMTP_USE_TLS:-true} == true && ${SMTP_USE_SSL:-false} == true ) ]] || \
-        die "SMTP_USE_TLS und SMTP_USE_SSL duerfen nicht gleichzeitig true sein."
+    if [[ $DJANGO_EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" ]]; then
+        for name in SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD; do
+            require_value "$name"
+        done
+        [[ $SMTP_HOST =~ ^[A-Za-z0-9.-]+$ ]] || die "SMTP_HOST ist ungueltig."
+        [[ $SMTP_USER =~ ^[A-Za-z0-9_.@+%:/=-]+$ ]] || die "SMTP_USER enthaelt ungueltige Zeichen."
+        [[ $SMTP_PORT =~ ^[0-9]+$ ]] || die "SMTP_PORT muss numerisch sein."
+        (( SMTP_PORT >= 1 && SMTP_PORT <= 65535 )) || die "SMTP_PORT liegt ausserhalb des gueltigen Bereichs."
+        [[ ! ( $SMTP_USE_TLS == true && $SMTP_USE_SSL == true ) ]] || \
+            die "SMTP_USE_TLS und SMTP_USE_SSL duerfen nicht gleichzeitig true sein."
+    fi
     [[ $ADMIN_USERNAME =~ ^[A-Za-z0-9_.@+-]+$ ]] || die "ADMIN_USERNAME enthaelt ungueltige Zeichen."
     (( ${#ADMIN_PASSWORD} >= 16 )) || die "ADMIN_PASSWORD muss mindestens 16 Zeichen lang sein."
 }
@@ -482,13 +499,15 @@ SQL
     write_env_line "$APP_ENV" DJANGO_STATIC_ROOT "$STATIC_DIR"
     write_env_line "$APP_ENV" WIKI_REGISTRATION_MODE disabled
     write_env_line "$APP_ENV" WIKI_TRUSTED_PROXY_IPS 127.0.0.1,::1
-    write_env_line "$APP_ENV" DJANGO_EMAIL_BACKEND django.core.mail.backends.smtp.EmailBackend
-    write_env_line "$APP_ENV" DJANGO_EMAIL_HOST "$SMTP_HOST"
-    write_env_line "$APP_ENV" DJANGO_EMAIL_PORT "$SMTP_PORT"
-    write_env_line "$APP_ENV" DJANGO_EMAIL_HOST_USER "$SMTP_USER"
-    write_env_line "$APP_ENV" DJANGO_EMAIL_HOST_PASSWORD_B64 "$smtp_password_b64"
-    write_env_line "$APP_ENV" DJANGO_EMAIL_USE_TLS "${SMTP_USE_TLS:-true}"
-    write_env_line "$APP_ENV" DJANGO_EMAIL_USE_SSL "${SMTP_USE_SSL:-false}"
+    write_env_line "$APP_ENV" DJANGO_EMAIL_BACKEND "$DJANGO_EMAIL_BACKEND"
+    if [[ $DJANGO_EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" ]]; then
+        write_env_line "$APP_ENV" DJANGO_EMAIL_HOST "$SMTP_HOST"
+        write_env_line "$APP_ENV" DJANGO_EMAIL_PORT "$SMTP_PORT"
+        write_env_line "$APP_ENV" DJANGO_EMAIL_HOST_USER "$SMTP_USER"
+        write_env_line "$APP_ENV" DJANGO_EMAIL_HOST_PASSWORD_B64 "$smtp_password_b64"
+        write_env_line "$APP_ENV" DJANGO_EMAIL_USE_TLS "$SMTP_USE_TLS"
+        write_env_line "$APP_ENV" DJANGO_EMAIL_USE_SSL "$SMTP_USE_SSL"
+    fi
     write_env_line "$APP_ENV" DJANGO_DEFAULT_FROM_EMAIL "$DEFAULT_FROM_EMAIL"
     chown root:"$APP_GROUP" "$APP_ENV"
     chmod 0640 "$APP_ENV"
@@ -733,7 +752,9 @@ main() {
     validate_config_values
     confirm_installation
     install_packages
-    test_smtp_connection
+    if [[ $DJANGO_EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" ]]; then
+        test_smtp_connection
+    fi
     obtain_certificate
     create_accounts_and_paths
     install_meilisearch

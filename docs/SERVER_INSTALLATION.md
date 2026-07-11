@@ -38,7 +38,7 @@ Vor dem Start muessen folgende Punkte erfuellt sein:
 1. Der VPS verwendet ein aktuelles Ubuntu 24.04 LTS.
 2. `wiki.only-space.de` zeigt per A- und gegebenenfalls AAAA-Record auf den VPS.
 3. Port 80 und 443 sind von aussen erreichbar.
-4. Der ausgehende SMTP-Zugang ist bekannt und vom VPS erreichbar.
+4. Fuer optionalen Mailversand ist ein ausgehender SMTP-Zugang bekannt.
 5. Beim Provider existiert ein aktueller VPS-Snapshot als Rueckrollpunkt.
 6. Das vollstaendige Projekt liegt unter `/var/www/cd-wiki`.
 
@@ -90,12 +90,17 @@ sudo bash scripts/install_ubuntu_24_04.sh
 ```
 
 Das ist der einzige Installationsbefehl. Das Skript fragt nacheinander Domain,
-Administrator, Let's-Encrypt-E-Mail und SMTP-Zugang ab. Passwoerter werden im
+Administrator und Let's-Encrypt-E-Mail ab. SMTP-Mailversand ist optional und
+standardmaessig deaktiviert. Passwoerter werden im
 Terminal nicht angezeigt und muessen zur Bestaetigung zweimal eingegeben werden.
-Fuer SMTP wird `starttls` auf Port 587 oder `ssl` auf Port 465 angeboten.
-Vor den Wiki- und Datenbankarbeiten prueft das Skript die verschluesselte
-SMTP-Anmeldung, versendet dabei aber keine Nachricht. Vor Beginn muss die
-angezeigte Zusammenfassung mit `ja` bestaetigt werden.
+Bei aktivierter SMTP-Einrichtung wird `starttls` auf Port 587 oder `ssl` auf
+Port 465 angeboten. Vor den Wiki- und Datenbankarbeiten prueft das Skript dann
+die verschluesselte SMTP-Anmeldung, versendet dabei aber keine Nachricht. Vor
+Beginn muss die angezeigte Zusammenfassung mit `ja` bestaetigt werden.
+
+Ohne SMTP bleibt die Registrierung standardmaessig deaktiviert und das Wiki ist
+voll nutzbar. E-Mail-Bestaetigung darf erst aktiviert werden, nachdem in
+`/etc/cd-wiki/wiki.env` ein funktionsfaehiges SMTP-Backend konfiguriert wurde.
 
 Meilisearch wird ohne weitere Eingabe installiert: Der Installer liest die
 aktuelle stabile Version aus der oeffentlichen GitHub-Release-API, waehlt das
@@ -106,7 +111,7 @@ Das Skript fuehrt in dieser Reihenfolge aus:
 
 1. Betriebssystem, Projektdateien, vorhandene Installation und Ports pruefen.
 2. Ubuntu-Pakete installieren, vorhandenes Django erkennen und MySQL sowie Apache starten.
-3. verschluesselte SMTP-Anmeldung pruefen.
+3. bei aktivem Mailversand die verschluesselte SMTP-Anmeldung pruefen.
 4. Per Certbot und ACME-Webroot ein TLS-Zertifikat beziehen.
 5. getrennte Systembenutzer und geschuetzte Verzeichnisse erstellen.
 6. aktuelle stabile Meilisearch-Version ermitteln, herunterladen und SHA-256 pruefen.

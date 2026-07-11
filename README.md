@@ -22,6 +22,7 @@ Node.js wird nur fuer den Editor-Build verwendet.
 
 - [Bedienungsanleitung](docs/BEDIENUNGSANLEITUNG.md)
 - [Installation](docs/INSTALL.md)
+- [Serverinstallation Ubuntu 24.04](docs/SERVER_INSTALLATION.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Sicherheit](docs/SECURITY.md)
 - [Themes, CSS und Sidebars](docs/THEMES.md)

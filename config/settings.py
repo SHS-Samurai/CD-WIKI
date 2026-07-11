@@ -1,7 +1,8 @@
 """Django settings for the wiki project."""
 
-from pathlib import Path
+import base64
 import os
+from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
@@ -160,7 +161,7 @@ USE_TZ = True
 
 
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = env_path("DJANGO_STATIC_ROOT", BASE_DIR / "staticfiles")
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 WIKI_STORAGE_ROOT = env_path("WIKI_STORAGE_ROOT", BASE_DIR / "storage")
@@ -240,6 +241,24 @@ EMAIL_BACKEND = env(
     "DJANGO_EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",
 )
+EMAIL_HOST = env("DJANGO_EMAIL_HOST", "localhost")
+EMAIL_PORT = env_int("DJANGO_EMAIL_PORT", 25)
+EMAIL_HOST_USER = env("DJANGO_EMAIL_HOST_USER", "")
+email_password_b64 = env("DJANGO_EMAIL_HOST_PASSWORD_B64", "") or ""
+try:
+    EMAIL_HOST_PASSWORD = base64.b64decode(
+        email_password_b64,
+        validate=True,
+    ).decode("utf-8")
+except (ValueError, UnicodeDecodeError) as exc:
+    raise ImproperlyConfigured(
+        "DJANGO_EMAIL_HOST_PASSWORD_B64 muss gueltiges Base64 mit UTF-8-Inhalt sein."
+    ) from exc
+EMAIL_USE_TLS = env_bool("DJANGO_EMAIL_USE_TLS", False)
+EMAIL_USE_SSL = env_bool("DJANGO_EMAIL_USE_SSL", False)
+DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL", "webmaster@localhost")
+if EMAIL_USE_TLS and EMAIL_USE_SSL:
+    raise ImproperlyConfigured("E-Mail-TLS und E-Mail-SSL duerfen nicht gleichzeitig aktiv sein.")
 if IS_PRODUCTION and EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend":
     raise ImproperlyConfigured("Ein produktives E-Mail-Backend muss konfiguriert sein.")
 

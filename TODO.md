@@ -52,3 +52,7 @@
 
 - [x] Zentrale CSS-Variablen und Layoutstruktur einfuehren
 - [x] Globale Theme-Verwaltung mit Validierung und Auditlog bauen
+
+## Phase 6 - Serverbetrieb
+
+- [x] Abgesicherte Erstinstallation fuer Ubuntu 24.04 dokumentieren und skripten

@@ -1,5 +1,14 @@
 # Sicherheit
 
+## Produktivinstallation
+
+Die abgesicherte Erstinstallation fuer Ubuntu 24.04 ist in
+`docs/SERVER_INSTALLATION.md` beschrieben. Anwendungsgeheimnisse liegen auf dem
+Server in `/etc/cd-wiki/wiki.env` mit restriktiven Rechten und nicht im
+Repository. Gunicorn, MySQL und Meilisearch werden nur an Loopback-Adressen
+gebunden. Vor dem produktiven Start sind eine externe Sicherung und ein
+Wiederherstellungstest erforderlich.
+
 ## Grundregeln
 
 - Keine Secrets im Repository speichern.

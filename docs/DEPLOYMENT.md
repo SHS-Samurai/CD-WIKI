@@ -3,6 +3,10 @@
 Zielsystem: Ubuntu-VPS mit Apache Reverse Proxy, Gunicorn oder uWSGI, MySQL und
 lokalem Meilisearch-Dienst.
 
+Die reproduzierbare Erstinstallation fuer einen frischen Ubuntu-24.04-VPS ist
+in `docs/SERVER_INSTALLATION.md` beschrieben und wird durch
+`scripts/install_ubuntu_24_04.sh` ausgefuehrt.
+
 ## Dienste
 
 - Apache auf Port 80/443
@@ -26,11 +30,19 @@ DJANGO_SECURE_HSTS_PRELOAD=True
 DJANGO_SECRET_KEY=<langer zufaelliger Wert>
 MEILISEARCH_MASTER_KEY=<separater zufaelliger Wert>
 DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+DJANGO_EMAIL_HOST=<SMTP-Server>
+DJANGO_EMAIL_PORT=587
+DJANGO_EMAIL_HOST_USER=<SMTP-Benutzer>
+DJANGO_EMAIL_HOST_PASSWORD_B64=<Base64-kodiertes SMTP-Passwort>
+DJANGO_EMAIL_USE_TLS=True
+DJANGO_EMAIL_USE_SSL=False
+DJANGO_DEFAULT_FROM_EMAIL=<Absenderadresse>
 ```
 
 Vor dem Start `python manage.py check --deploy` gegen diese Umgebung ausfuehren.
-Der HSTS-Preload-Header gilt zusammen mit `includeSubDomains`; alle verwendeten
-Unterdomains von `wiki.only-space.de` muessen daher HTTPS unterstuetzen.
+HSTS-Preload und `includeSubDomains` erst aktivieren, nachdem HTTPS und die
+automatische Zertifikatserneuerung stabil getestet wurden. Alle betroffenen
+Unterdomains muessen dann HTTPS unterstuetzen.
 
 ## Theme und statische Dateien
 
@@ -66,8 +78,10 @@ ueber Django und filtert Ergebnisse nach Web-Rechten.
 
 ## Statische Dateien
 
-Vor `collectstatic` den Tiptap-Editor bauen. Node.js wird nicht als Dienst
-betrieben.
+Bei Entwicklungs- oder Release-Builds vor `collectstatic` den Tiptap-Editor
+bauen. Node.js wird nicht als Dienst betrieben. Der Serverinstaller verwendet
+das bereits versionierte Bundle `static/editor/wiki-editor.js` und installiert
+auf dem VPS kein Node.js.
 
 ```bash
 cd frontend/editor

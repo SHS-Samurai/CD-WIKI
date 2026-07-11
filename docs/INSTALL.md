@@ -2,11 +2,14 @@
 
 ## Voraussetzungen
 
-- Python 3.13
+- Python 3.12 oder neuer
 - Node.js fuer den Editor-Build
 - MySQL
 - Meilisearch
 - Git
+
+Fuer die produktive Erstinstallation auf Ubuntu 24.04 gilt die separate
+Anleitung `docs/SERVER_INSTALLATION.md`.
 
 ## MySQL
 

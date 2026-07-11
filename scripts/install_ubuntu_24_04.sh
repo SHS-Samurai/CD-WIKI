@@ -1,0 +1,575 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+umask 027
+
+readonly APP_NAME="cd-wiki"
+readonly APP_USER="cdwiki"
+readonly APP_GROUP="cdwiki"
+readonly APP_DIR="/opt/cd-wiki/app"
+readonly VENV_DIR="/opt/cd-wiki/venv"
+readonly CONFIG_DIR="/etc/cd-wiki"
+readonly APP_ENV="${CONFIG_DIR}/wiki.env"
+readonly STORAGE_DIR="/var/lib/cd-wiki/storage"
+readonly STATIC_DIR="/var/lib/cd-wiki/static"
+readonly BACKUP_DIR="/var/backups/cd-wiki"
+readonly MEILI_USER="meilisearch"
+readonly MEILI_GROUP="meilisearch"
+readonly MEILI_ENV="/etc/meilisearch.env"
+readonly MEILI_DATA_DIR="/var/lib/meilisearch"
+readonly APACHE_SITE="/etc/apache2/sites-available/wiki.only-space.de.conf"
+readonly INSTALL_MARKER="${CONFIG_DIR}/installed"
+readonly DB_NAME="cd-wiki"
+readonly DB_USER="cdwiki"
+readonly SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
+CONFIG_FILE=""
+TEMP_MEILI_BINARY=""
+
+log() {
+    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+}
+
+die() {
+    printf 'FEHLER: %s\n' "$*" >&2
+    exit 1
+}
+
+on_error() {
+    local exit_code=$?
+    printf 'FEHLER in Zeile %s (Exit-Code %s). Die Installation wurde nicht als abgeschlossen markiert.\n' \
+        "${BASH_LINENO[0]}" "$exit_code" >&2
+    exit "$exit_code"
+}
+trap on_error ERR
+
+cleanup() {
+    if [[ -n $TEMP_MEILI_BINARY && -f $TEMP_MEILI_BINARY ]]; then
+        rm -f -- "$TEMP_MEILI_BINARY"
+    fi
+}
+trap cleanup EXIT
+
+usage() {
+    cat <<'EOF'
+Aufruf:
+  sudo bash scripts/install_ubuntu_24_04.sh /root/cd-wiki-install.env
+  sudo bash scripts/install_ubuntu_24_04.sh --check
+
+Die Konfigurationsdatei muss root gehoeren und darf nur fuer root lesbar sein.
+EOF
+}
+
+require_root() {
+    [[ ${EUID} -eq 0 ]] || die "Das Skript muss mit sudo oder als root ausgefuehrt werden."
+}
+
+require_ubuntu_2404() {
+    # shellcheck source=/dev/null
+    source /etc/os-release
+    [[ ${ID:-} == "ubuntu" && ${VERSION_ID:-} == "24.04" ]] || \
+        die "Unterstuetzt wird ausschliesslich Ubuntu 24.04 LTS."
+}
+
+validate_config_file() {
+    [[ -f "$CONFIG_FILE" ]] || die "Konfigurationsdatei nicht gefunden: ${CONFIG_FILE}"
+    [[ $(stat -c '%u' "$CONFIG_FILE") == "0" ]] || die "Die Konfigurationsdatei muss root gehoeren."
+    local mode
+    mode=$(stat -c '%a' "$CONFIG_FILE")
+    (( (8#${mode} & 077) == 0 )) || die "Die Konfigurationsdatei muss Modus 600 oder strenger haben."
+}
+
+load_config_file() {
+    local line key value
+    local -A allowed=(
+        [DOMAIN]=1 [LETSENCRYPT_EMAIL]=1
+        [SMTP_HOST]=1 [SMTP_PORT]=1 [SMTP_USER]=1 [SMTP_PASSWORD]=1
+        [SMTP_USE_TLS]=1 [SMTP_USE_SSL]=1 [DEFAULT_FROM_EMAIL]=1
+        [ADMIN_USERNAME]=1 [ADMIN_EMAIL]=1 [ADMIN_PASSWORD]=1
+        [EXPECTED_GIT_COMMIT]=1 [MEILISEARCH_VERSION]=1 [MEILISEARCH_SHA256]=1
+    )
+
+    while IFS= read -r line || [[ -n $line ]]; do
+        line=${line%$'\r'}
+        [[ -z $line || $line =~ ^[[:space:]]*# ]] && continue
+        if [[ $line =~ ^([A-Z][A-Z0-9_]*)=\"([^\"]*)\"$ ]]; then
+            key=${BASH_REMATCH[1]}
+            value=${BASH_REMATCH[2]}
+        else
+            die "Ungueltige Konfigurationszeile. Erlaubt ist nur NAME=\"Wert\"."
+        fi
+        [[ ${allowed[$key]+isset} ]] || die "Unbekannter Konfigurationswert: ${key}"
+        printf -v "$key" '%s' "$value"
+    done < "$CONFIG_FILE"
+}
+
+require_value() {
+    local name=$1
+    [[ -n ${!name:-} ]] || die "Pflichtwert ${name} fehlt in ${CONFIG_FILE}."
+    [[ ${!name} != *$'\n'* && ${!name} != *$'\r'* ]] || die "${name} darf keinen Zeilenumbruch enthalten."
+}
+
+validate_config_values() {
+    local required=(
+        DOMAIN LETSENCRYPT_EMAIL SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD
+        DEFAULT_FROM_EMAIL ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
+        MEILISEARCH_VERSION MEILISEARCH_SHA256 EXPECTED_GIT_COMMIT
+    )
+    local name
+    for name in "${required[@]}"; do
+        require_value "$name"
+    done
+
+    [[ $DOMAIN =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "DOMAIN ist ungueltig."
+    [[ $DOMAIN == "${DOMAIN,,}" ]] || die "DOMAIN muss in Kleinbuchstaben angegeben werden."
+    [[ $DOMAIN == *.* ]] || die "DOMAIN muss ein vollstaendiger DNS-Name sein."
+    local email_pattern='^[A-Za-z0-9_.+%-]+@[A-Za-z0-9.-]+$'
+    [[ $LETSENCRYPT_EMAIL =~ $email_pattern && $ADMIN_EMAIL =~ $email_pattern && $DEFAULT_FROM_EMAIL =~ $email_pattern ]] || \
+        die "E-Mail-Adressen sind ungueltig."
+    [[ $SMTP_HOST =~ ^[A-Za-z0-9.-]+$ ]] || die "SMTP_HOST ist ungueltig."
+    [[ $SMTP_USER =~ ^[A-Za-z0-9_.@+%:/=-]+$ ]] || die "SMTP_USER enthaelt ungueltige Zeichen."
+    [[ $SMTP_PORT =~ ^[0-9]+$ ]] || die "SMTP_PORT muss numerisch sein."
+    (( SMTP_PORT >= 1 && SMTP_PORT <= 65535 )) || die "SMTP_PORT liegt ausserhalb des gueltigen Bereichs."
+    [[ ${SMTP_USE_TLS:-true} =~ ^(true|false)$ ]] || die "SMTP_USE_TLS muss true oder false sein."
+    [[ ${SMTP_USE_SSL:-false} =~ ^(true|false)$ ]] || die "SMTP_USE_SSL muss true oder false sein."
+    [[ ! ( ${SMTP_USE_TLS:-true} == true && ${SMTP_USE_SSL:-false} == true ) ]] || \
+        die "SMTP_USE_TLS und SMTP_USE_SSL duerfen nicht gleichzeitig true sein."
+    [[ $ADMIN_USERNAME =~ ^[A-Za-z0-9_.@+-]+$ ]] || die "ADMIN_USERNAME enthaelt ungueltige Zeichen."
+    (( ${#ADMIN_PASSWORD} >= 16 )) || die "ADMIN_PASSWORD muss mindestens 16 Zeichen lang sein."
+    [[ $MEILISEARCH_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "MEILISEARCH_VERSION muss wie v1.45.0 aussehen."
+    [[ $MEILISEARCH_SHA256 =~ ^[A-Fa-f0-9]{64}$ ]] || die "MEILISEARCH_SHA256 muss eine SHA-256-Pruefsumme sein."
+    [[ $EXPECTED_GIT_COMMIT =~ ^[A-Fa-f0-9]{40}$ ]] || die "EXPECTED_GIT_COMMIT muss ein vollstaendiger Git-Commit sein."
+}
+
+ensure_fresh_target() {
+    [[ ! -e "$INSTALL_MARKER" ]] || die "Die Installation ist bereits abgeschlossen. Verwende --check."
+    [[ ! -e /opt/cd-wiki && ! -e "$CONFIG_DIR" ]] || \
+        die "Zielpfade existieren bereits. Vor erneutem Start Ursache pruefen und kontrolliert zurueckrollen."
+    [[ ! -e /etc/systemd/system/cd-wiki.service && ! -e /etc/systemd/system/meilisearch.service ]] || \
+        die "Eine der vorgesehenen systemd-Units existiert bereits."
+    [[ -f "${SOURCE_DIR}/manage.py" && -f "${SOURCE_DIR}/static/editor/wiki-editor.js" ]] || \
+        die "Projektquelle oder gebautes Editor-Bundle fehlt."
+    command -v git >/dev/null || die "Git wird fuer die Commit-Pruefung benoetigt."
+    [[ $(git -C "$SOURCE_DIR" rev-parse HEAD) == "${EXPECTED_GIT_COMMIT,,}" ]] || \
+        die "Der ausgecheckte Commit stimmt nicht mit EXPECTED_GIT_COMMIT ueberein."
+    [[ -z $(git -C "$SOURCE_DIR" status --porcelain) ]] || \
+        die "Das Git-Arbeitsverzeichnis ist nicht sauber."
+    if ss -ltnH | awk '{print $4}' | grep -Eq '(^|:)8000$|(^|:)7700$'; then
+        die "Port 8000 oder 7700 ist bereits belegt."
+    fi
+}
+
+write_env_line() {
+    local file=$1 name=$2 value=$3
+    [[ $value != *$'\n'* && $value != *$'\r'* ]] || die "Umgebungswert ${name} enthaelt einen Zeilenumbruch."
+    printf '%s=%s\n' "$name" "$value" >> "$file"
+}
+
+run_manage() {
+    runuser -u "$APP_USER" -- "$VENV_DIR/bin/python" "$APP_DIR/manage.py" "$@"
+}
+
+install_packages() {
+    log "Installiere Ubuntu-Pakete."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        apache2 ca-certificates certbot curl default-libmysqlclient-dev \
+        build-essential git mysql-server pkg-config python3 python3-dev python3-pip \
+        python3-venv python3-certbot-apache rsync
+    systemctl enable --now mysql apache2
+
+    cat > /etc/mysql/mysql.conf.d/cd-wiki.cnf <<'EOF'
+[mysqld]
+bind-address=127.0.0.1
+mysqlx-bind-address=127.0.0.1
+local-infile=0
+EOF
+    systemctl restart mysql
+}
+
+obtain_certificate() {
+    log "Pruefe DNS und fordere das TLS-Zertifikat an."
+    getent ahosts "$DOMAIN" >/dev/null || die "DOMAIN ist per DNS nicht aufloesbar: ${DOMAIN}"
+    install -d -o root -g www-data -m 0750 /var/www/cd-wiki-acme/.well-known/acme-challenge
+
+    cat > "$APACHE_SITE" <<EOF
+<VirtualHost *:80>
+    ServerName ${DOMAIN}
+    DocumentRoot /var/www/cd-wiki-acme
+
+    <Directory /var/www/cd-wiki-acme>
+        Options -Indexes
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ErrorLog \${APACHE_LOG_DIR}/cd-wiki-error.log
+    CustomLog \${APACHE_LOG_DIR}/cd-wiki-access.log combined
+</VirtualHost>
+EOF
+    a2ensite "$(basename "$APACHE_SITE")"
+    apache2ctl configtest
+    systemctl reload apache2
+
+    if [[ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]]; then
+        certbot certonly --webroot -w /var/www/cd-wiki-acme \
+            --non-interactive --agree-tos --no-eff-email \
+            --email "$LETSENCRYPT_EMAIL" -d "$DOMAIN"
+    fi
+}
+
+create_accounts_and_paths() {
+    log "Lege getrennte Systembenutzer und geschuetzte Pfade an."
+    addgroup --system "$APP_GROUP"
+    adduser --system --ingroup "$APP_GROUP" --home /nonexistent --no-create-home --shell /usr/sbin/nologin "$APP_USER"
+    addgroup --system "$MEILI_GROUP"
+    adduser --system --ingroup "$MEILI_GROUP" --home /nonexistent --no-create-home --shell /usr/sbin/nologin "$MEILI_USER"
+
+    install -d -o root -g root -m 0755 /opt/cd-wiki
+    install -d -o root -g root -m 0755 /var/lib/cd-wiki
+    install -d -o root -g "$APP_GROUP" -m 0750 "$APP_DIR" "$CONFIG_DIR"
+    install -d -o "$APP_USER" -g "$APP_GROUP" -m 0750 "$STORAGE_DIR"
+    install -d -o "$APP_USER" -g www-data -m 2750 "$STATIC_DIR"
+    install -d -o root -g root -m 0700 "$BACKUP_DIR"
+    install -d -o "$MEILI_USER" -g "$MEILI_GROUP" -m 0750 \
+        "$MEILI_DATA_DIR/data" "$MEILI_DATA_DIR/dumps" "$MEILI_DATA_DIR/snapshots"
+
+    rsync -a \
+        --exclude '.git/' --exclude '.env' --exclude '.venv/' --exclude 'node_modules/' \
+        --exclude 'storage/' --exclude 'logs/' --exclude 'staticfiles/' \
+        "${SOURCE_DIR}/" "${APP_DIR}/"
+    chown -R root:"$APP_GROUP" "$APP_DIR"
+    find "$APP_DIR" -type d -exec chmod 0750 {} +
+    find "$APP_DIR" -type f -exec chmod 0640 {} +
+}
+
+install_meilisearch() {
+    local architecture asset
+    architecture=$(dpkg --print-architecture)
+    case "$architecture" in
+        amd64) asset="meilisearch-linux-amd64" ;;
+        arm64) asset="meilisearch-linux-aarch64" ;;
+        *) die "Meilisearch wird von diesem Skript auf ${architecture} nicht unterstuetzt." ;;
+    esac
+
+    TEMP_MEILI_BINARY=$(mktemp)
+    log "Lade Meilisearch ${MEILISEARCH_VERSION} und pruefe SHA-256."
+    curl --fail --location --proto '=https' --tlsv1.2 \
+        "https://github.com/meilisearch/meilisearch/releases/download/${MEILISEARCH_VERSION}/${asset}" \
+        -o "$TEMP_MEILI_BINARY"
+    printf '%s  %s\n' "${MEILISEARCH_SHA256,,}" "$TEMP_MEILI_BINARY" | sha256sum --check --status || \
+        die "Die Meilisearch-Pruefsumme stimmt nicht."
+    install -o root -g root -m 0755 "$TEMP_MEILI_BINARY" /usr/local/bin/meilisearch
+    rm -f "$TEMP_MEILI_BINARY"
+    TEMP_MEILI_BINARY=""
+}
+
+configure_database_and_environment() {
+    local db_password django_secret meili_master smtp_password_b64
+    db_password=$(openssl rand -hex 32)
+    django_secret=$(openssl rand -hex 48)
+    meili_master=$(openssl rand -hex 32)
+    smtp_password_b64=$(printf '%s' "$SMTP_PASSWORD" | base64 -w 0)
+
+    if mysql --protocol=socket --batch --skip-column-names -e \
+        "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${DB_NAME}'" | grep -q .; then
+        die "Die Datenbank ${DB_NAME} existiert bereits; es wird nichts ueberschrieben."
+    fi
+    if mysql --protocol=socket --batch --skip-column-names -e \
+        "SELECT User FROM mysql.user WHERE User='${DB_USER}' AND Host='127.0.0.1'" | grep -q .; then
+        die "Der MySQL-Benutzer ${DB_USER}@127.0.0.1 existiert bereits."
+    fi
+
+    log "Erstelle MySQL-Datenbank und minimal berechtigten Anwendungsbenutzer."
+    mysql --protocol=socket <<SQL
+CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${db_password}';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
+SQL
+
+    : > "$APP_ENV"
+    write_env_line "$APP_ENV" DJANGO_ENVIRONMENT production
+    write_env_line "$APP_ENV" DJANGO_DEBUG False
+    write_env_line "$APP_ENV" DJANGO_SECRET_KEY "$django_secret"
+    write_env_line "$APP_ENV" DJANGO_ALLOWED_HOSTS "$DOMAIN"
+    write_env_line "$APP_ENV" DJANGO_CSRF_TRUSTED_ORIGINS "https://${DOMAIN}"
+    write_env_line "$APP_ENV" DJANGO_TRUST_X_FORWARDED_PROTO True
+    write_env_line "$APP_ENV" DJANGO_SESSION_COOKIE_SECURE True
+    write_env_line "$APP_ENV" DJANGO_CSRF_COOKIE_SECURE True
+    write_env_line "$APP_ENV" DJANGO_SECURE_SSL_REDIRECT True
+    write_env_line "$APP_ENV" DJANGO_SECURE_HSTS_SECONDS 86400
+    write_env_line "$APP_ENV" DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS False
+    write_env_line "$APP_ENV" DJANGO_SECURE_HSTS_PRELOAD False
+    write_env_line "$APP_ENV" DB_NAME "$DB_NAME"
+    write_env_line "$APP_ENV" DB_USER "$DB_USER"
+    write_env_line "$APP_ENV" DB_PASSWORD "$db_password"
+    write_env_line "$APP_ENV" DB_HOST 127.0.0.1
+    write_env_line "$APP_ENV" DB_PORT 3306
+    write_env_line "$APP_ENV" DB_CONN_MAX_AGE 60
+    write_env_line "$APP_ENV" MEILISEARCH_URL http://127.0.0.1:7700
+    write_env_line "$APP_ENV" MEILISEARCH_MASTER_KEY "$meili_master"
+    write_env_line "$APP_ENV" WIKI_STORAGE_ROOT "$STORAGE_DIR"
+    write_env_line "$APP_ENV" DJANGO_STATIC_ROOT "$STATIC_DIR"
+    write_env_line "$APP_ENV" WIKI_REGISTRATION_MODE disabled
+    write_env_line "$APP_ENV" WIKI_TRUSTED_PROXY_IPS 127.0.0.1,::1
+    write_env_line "$APP_ENV" DJANGO_EMAIL_BACKEND django.core.mail.backends.smtp.EmailBackend
+    write_env_line "$APP_ENV" DJANGO_EMAIL_HOST "$SMTP_HOST"
+    write_env_line "$APP_ENV" DJANGO_EMAIL_PORT "$SMTP_PORT"
+    write_env_line "$APP_ENV" DJANGO_EMAIL_HOST_USER "$SMTP_USER"
+    write_env_line "$APP_ENV" DJANGO_EMAIL_HOST_PASSWORD_B64 "$smtp_password_b64"
+    write_env_line "$APP_ENV" DJANGO_EMAIL_USE_TLS "${SMTP_USE_TLS:-true}"
+    write_env_line "$APP_ENV" DJANGO_EMAIL_USE_SSL "${SMTP_USE_SSL:-false}"
+    write_env_line "$APP_ENV" DJANGO_DEFAULT_FROM_EMAIL "$DEFAULT_FROM_EMAIL"
+    chown root:"$APP_GROUP" "$APP_ENV"
+    chmod 0640 "$APP_ENV"
+    ln -s "$APP_ENV" "${APP_DIR}/.env"
+
+    : > "$MEILI_ENV"
+    write_env_line "$MEILI_ENV" MEILI_ENV production
+    write_env_line "$MEILI_ENV" MEILI_HTTP_ADDR 127.0.0.1:7700
+    write_env_line "$MEILI_ENV" MEILI_DB_PATH "$MEILI_DATA_DIR/data"
+    write_env_line "$MEILI_ENV" MEILI_DUMP_DIR "$MEILI_DATA_DIR/dumps"
+    write_env_line "$MEILI_ENV" MEILI_SNAPSHOT_DIR "$MEILI_DATA_DIR/snapshots"
+    write_env_line "$MEILI_ENV" MEILI_MASTER_KEY "$meili_master"
+    write_env_line "$MEILI_ENV" MEILI_NO_ANALYTICS true
+    chown root:"$MEILI_GROUP" "$MEILI_ENV"
+    chmod 0640 "$MEILI_ENV"
+}
+
+install_python_application() {
+    log "Installiere Python-Abhaengigkeiten und bereite Django vor."
+    python3 -m venv "$VENV_DIR"
+    "$VENV_DIR/bin/python" -m pip install --upgrade pip
+    "$VENV_DIR/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
+
+    mysqldump --protocol=socket --single-transaction --no-tablespaces \
+        --routines --triggers --events --hex-blob "$DB_NAME" \
+        | gzip -9 > "${BACKUP_DIR}/pre-migrate-$(date -u '+%Y%m%dT%H%M%SZ').sql.gz"
+    run_manage check
+    run_manage migrate --noinput
+    run_manage collectstatic --noinput
+    DJANGO_SUPERUSER_PASSWORD="$ADMIN_PASSWORD" runuser -u "$APP_USER" -- \
+        env DJANGO_SUPERUSER_PASSWORD="$ADMIN_PASSWORD" \
+        "$VENV_DIR/bin/python" "$APP_DIR/manage.py" createsuperuser --noinput \
+        --username "$ADMIN_USERNAME" --email "$ADMIN_EMAIL"
+}
+
+install_services() {
+    log "Installiere gehaertete systemd-Dienste."
+    cat > /etc/systemd/system/meilisearch.service <<EOF
+[Unit]
+Description=Meilisearch fuer CD-Wiki
+After=network.target
+
+[Service]
+Type=simple
+User=${MEILI_USER}
+Group=${MEILI_GROUP}
+EnvironmentFile=${MEILI_ENV}
+ExecStart=/usr/local/bin/meilisearch
+Restart=on-failure
+RestartSec=5s
+UMask=0027
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=${MEILI_DATA_DIR}
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    cat > /etc/systemd/system/cd-wiki.service <<EOF
+[Unit]
+Description=CD-Wiki Gunicorn
+After=network.target mysql.service meilisearch.service
+Requires=mysql.service meilisearch.service
+
+[Service]
+Type=simple
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${APP_DIR}
+EnvironmentFile=${APP_ENV}
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=${VENV_DIR}/bin/gunicorn --bind 127.0.0.1:8000 --workers 3 --timeout 60 --access-logfile - --error-logfile - config.wsgi:application
+Restart=on-failure
+RestartSec=5s
+UMask=0027
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=${STORAGE_DIR}
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    cat > /etc/systemd/system/cd-wiki-maintenance.service <<EOF
+[Unit]
+Description=CD-Wiki Wartungsaufgaben
+After=mysql.service
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${APP_DIR}
+EnvironmentFile=${APP_ENV}
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=${VENV_DIR}/bin/python ${APP_DIR}/manage.py prune_rate_limits
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=${STORAGE_DIR}
+EOF
+
+    cat > /etc/systemd/system/cd-wiki-maintenance.timer <<'EOF'
+[Unit]
+Description=Taegliche CD-Wiki Wartung
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable --now meilisearch.service
+    systemctl enable --now cd-wiki.service cd-wiki-maintenance.timer
+}
+
+configure_apache() {
+    log "Konfiguriere Apache als HTTPS-Reverse-Proxy."
+    a2enmod headers proxy proxy_http rewrite ssl
+    cat > "$APACHE_SITE" <<EOF
+<VirtualHost *:80>
+    ServerName ${DOMAIN}
+    Alias /.well-known/acme-challenge/ /var/www/cd-wiki-acme/.well-known/acme-challenge/
+
+    <Directory /var/www/cd-wiki-acme/.well-known/acme-challenge>
+        Options -Indexes
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://${DOMAIN}%{REQUEST_URI} [R=301,L,NE]
+
+    ErrorLog \${APACHE_LOG_DIR}/cd-wiki-error.log
+    CustomLog \${APACHE_LOG_DIR}/cd-wiki-access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName ${DOMAIN}
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/${DOMAIN}/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/${DOMAIN}/privkey.pem
+    SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1
+
+    ProxyRequests Off
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+
+    Alias /static/ ${STATIC_DIR}/
+    <Directory ${STATIC_DIR}>
+        Options -Indexes
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ProxyPass /static/ !
+    ProxyPass / http://127.0.0.1:8000/ retry=0 timeout=60
+    ProxyPassReverse / http://127.0.0.1:8000/
+    LimitRequestBody 27262976
+
+    ErrorLog \${APACHE_LOG_DIR}/cd-wiki-error.log
+    CustomLog \${APACHE_LOG_DIR}/cd-wiki-access.log combined
+</VirtualHost>
+EOF
+    install -d -o root -g root -m 0755 /etc/letsencrypt/renewal-hooks/deploy
+    cat > /etc/letsencrypt/renewal-hooks/deploy/reload-apache <<'EOF'
+#!/usr/bin/env sh
+set -eu
+apache2ctl configtest
+systemctl reload apache2
+EOF
+    chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/reload-apache
+    apache2ctl configtest
+    systemctl reload apache2
+}
+
+post_install_checks() {
+    log "Fuehre Produktions- und Erreichbarkeitspruefungen aus."
+    run_manage check --deploy
+    run_manage reindex_search
+    systemctl --quiet is-active mysql meilisearch cd-wiki apache2
+    curl --fail --silent --show-error http://127.0.0.1:7700/health >/dev/null
+    curl --fail --silent --show-error -H "Host: ${DOMAIN}" -H "X-Forwarded-Proto: https" \
+        http://127.0.0.1:8000/ >/dev/null
+    curl --fail --silent --show-error --resolve "${DOMAIN}:443:127.0.0.1" \
+        "https://${DOMAIN}/" >/dev/null
+    certbot renew --dry-run
+}
+
+check_installation() {
+    [[ -f "$INSTALL_MARKER" ]] || die "Keine abgeschlossene Installation gefunden."
+    [[ -r "$APP_ENV" ]] || die "Produktionskonfiguration ist nicht lesbar: ${APP_ENV}"
+    DOMAIN=$(awk -F= '$1 == "DJANGO_ALLOWED_HOSTS" { print $2; exit }' "$APP_ENV")
+    [[ $DOMAIN =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || \
+        die "DJANGO_ALLOWED_HOSTS enthaelt keinen einzelnen gueltigen Domainnamen."
+    post_install_checks
+    log "Alle Installationspruefungen waren erfolgreich."
+}
+
+main() {
+    require_root
+    require_ubuntu_2404
+
+    if [[ $# -eq 1 && $1 == "--check" ]]; then
+        check_installation
+        exit 0
+    fi
+
+    [[ $# -eq 1 ]] || { usage; exit 2; }
+    CONFIG_FILE=$(readlink -f -- "$1")
+    validate_config_file
+    load_config_file
+    validate_config_values
+
+    ensure_fresh_target
+    install_packages
+    obtain_certificate
+    create_accounts_and_paths
+    install_meilisearch
+    configure_database_and_environment
+    install_python_application
+    install_services
+    configure_apache
+    post_install_checks
+
+    printf 'Installiert am %s aus %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$SOURCE_DIR" > "$INSTALL_MARKER"
+    chmod 0640 "$INSTALL_MARKER"
+    log "Installation abgeschlossen: https://${DOMAIN}/"
+    log "Die Installationskonfiguration enthaelt Geheimnisse und sollte jetzt sicher geloescht werden."
+}
+
+main "$@"

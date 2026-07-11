@@ -40,13 +40,14 @@ Vor dem Start muessen folgende Punkte erfuellt sein:
 3. Port 80 und 443 sind von aussen erreichbar.
 4. Der ausgehende SMTP-Zugang ist bekannt und vom VPS erreichbar.
 5. Beim Provider existiert ein aktueller VPS-Snapshot als Rueckrollpunkt.
-6. Das Repository ist sauber und auf den gewuenschten Commit ausgecheckt.
+6. Das vollstaendige Projekt liegt unter `/var/www/cd-wiki`.
 
 Der Installer setzt voraus, dass auf dem frischen System noch keine Installation
 unter den Laufzeitpfaden, keine gleichnamige Datenbank und keine gleichnamigen
-systemd-Dienste existieren. Das Projekt selbst muss bereits vollstaendig und als
-sauberes Git-Repository unter `/var/www/cd-wiki` liegen. Der Installer bricht
-bei Abweichungen ab und ueberschreibt keine bestehende Installation.
+systemd-Dienste existieren. Das Projekt selbst muss bereits vollstaendig unter
+`/var/www/cd-wiki` liegen. Ist es ein Git-Repository, muss der Arbeitsbaum
+sauber sein; ein manueller Upload ohne `.git` wird ebenfalls unterstuetzt. Der
+Installer bricht bei Abweichungen ab und ueberschreibt keine bestehende Installation.
 Gleichnamige Systembenutzer sowie vorhandene Meilisearch-, Apache- oder
 MySQL-Konfigurationen werden ebenfalls nicht ersetzt.
 
@@ -62,69 +63,50 @@ git status --short
 git rev-parse HEAD
 ```
 
-`git status --short` darf nichts ausgeben. Den vollstaendigen Wert von
-`git rev-parse HEAD` spaeter als `EXPECTED_GIT_COMMIT` eintragen.
+`git status --short` darf bei einer Git-Installation nichts ausgeben.
 
 Wenn die Dateien bereits in `/var/www/cd-wiki` liegen, nicht erneut klonen.
-Stattdessen dort `git status --short` und `git rev-parse HEAD` ausfuehren. Ohne
-das Verzeichnis `.git` ist keine verifizierte Installation moeglich; in diesem
-Fall das Repository frisch in den vorgesehenen Pfad klonen.
+Der Installer kann vollstaendig hochgeladene Projektdateien auch ohne das
+Verzeichnis `.git` installieren. Git wird fuer spaetere, nachvollziehbare Updates
+dennoch empfohlen.
 
 Obwohl die Anwendung unter `/var/www` liegt, wird dieses Verzeichnis nicht als
 Apache-`DocumentRoot` freigegeben. Apache liefert nur die getrennt erzeugten
 statischen Dateien aus und leitet Anwendungsaufrufe an Gunicorn weiter.
 
-## 2. Meilisearch-Version pruefen
-
-Auf der offiziellen Meilisearch-Release-Seite eine aktuelle stabile Version
-waehlen. Zum Server passend wird das Asset `meilisearch-linux-amd64` oder
-`meilisearch-linux-aarch64` verwendet. Versionsnummer und vom Release
-veroeffentlichten SHA-256-Digest in die Installationskonfiguration uebernehmen.
-Das Skript installiert kein Binary, dessen Pruefsumme abweicht.
-
-- Releases: <https://github.com/meilisearch/meilisearch/releases>
-- Installationshinweise: <https://www.meilisearch.com/docs/resources/self_hosting/getting_started/install_locally>
-
-## 3. Installationskonfiguration anlegen
+## 2. Installation starten
 
 ```bash
 cd /var/www/cd-wiki
-sudo cp scripts/install.env.example /root/cd-wiki-install.env
-sudo chown root:root /root/cd-wiki-install.env
-sudo chmod 600 /root/cd-wiki-install.env
-sudoedit /root/cd-wiki-install.env
+sudo bash scripts/install_ubuntu_24_04.sh
 ```
 
-Alle Platzhalter muessen ersetzt werden. Das Admin-Passwort muss mindestens 16
-Zeichen lang sein. Fuer den produktiven Betrieb ist ein einzigartiges, vom
-Passwortmanager erzeugtes Passwort erforderlich. `SMTP_USE_TLS` ist fuer Port
-587 normalerweise `true`; bei implizitem TLS auf Port 465 wird stattdessen
-`SMTP_USE_SSL=true` gesetzt. Beide Werte duerfen nicht gleichzeitig aktiv sein.
+Das ist der einzige Installationsbefehl. Das Skript fragt nacheinander Domain,
+Administrator, Let's-Encrypt-E-Mail und SMTP-Zugang ab. Passwoerter werden im
+Terminal nicht angezeigt und muessen zur Bestaetigung zweimal eingegeben werden.
+Fuer SMTP wird `starttls` auf Port 587 oder `ssl` auf Port 465 angeboten.
+Vor den Wiki- und Datenbankarbeiten prueft das Skript die verschluesselte
+SMTP-Anmeldung, versendet dabei aber keine Nachricht. Vor Beginn muss die
+angezeigte Zusammenfassung mit `ja` bestaetigt werden.
 
-Der Installer parst nur die vorgegebenen `NAME="Wert"`-Zeilen. Befehle,
-Variablenersetzungen, unbekannte Namen oder unquoted Werte werden nicht
-ausgefuehrt, sondern fuehren zum Abbruch. Ein Wert darf kein doppeltes
-Anfuehrungszeichen und keinen Zeilenumbruch enthalten.
-
-## 4. Installation starten
-
-```bash
-cd /var/www/cd-wiki
-sudo bash scripts/install_ubuntu_24_04.sh /root/cd-wiki-install.env
-```
+Meilisearch wird ohne weitere Eingabe installiert: Der Installer liest die
+aktuelle stabile Version aus der oeffentlichen GitHub-Release-API, waehlt das
+Binary passend zu `amd64` oder `arm64` und verifiziert vor der Installation den
+von GitHub gelieferten SHA-256-Digest.
 
 Das Skript fuehrt in dieser Reihenfolge aus:
 
-1. Betriebssystem, Konfigurationsrechte, Commit, Arbeitsbaum und Ports pruefen.
+1. Betriebssystem, Projektdateien, vorhandene Installation und Ports pruefen.
 2. Ubuntu-Pakete installieren, vorhandenes Django erkennen und MySQL sowie Apache starten.
-3. Per Certbot und ACME-Webroot ein TLS-Zertifikat beziehen.
-4. getrennte Systembenutzer und geschuetzte Verzeichnisse erstellen.
-5. Meilisearch herunterladen und die angegebene SHA-256-Pruefsumme pruefen.
-6. Datenbank, zufaellige Anwendungsschluessel und geschuetzte Env-Dateien anlegen.
-7. isolierte Python-Umgebung anlegen, Django 5.2.x pruefen, Migrationen,
+3. verschluesselte SMTP-Anmeldung pruefen.
+4. Per Certbot und ACME-Webroot ein TLS-Zertifikat beziehen.
+5. getrennte Systembenutzer und geschuetzte Verzeichnisse erstellen.
+6. aktuelle stabile Meilisearch-Version ermitteln, herunterladen und SHA-256 pruefen.
+7. Datenbank, zufaellige Anwendungsschluessel und geschuetzte Env-Dateien anlegen.
+8. isolierte Python-Umgebung anlegen, Django 5.2.x pruefen, Migrationen,
    statische Dateien und ersten Administrator anlegen.
-8. gehaertete systemd-Dienste und Apache-Reverse-Proxy aktivieren.
-9. Django-Deployment-Check, Suche, Dienste, HTTPS und Zertifikatserneuerung testen.
+9. gehaertete systemd-Dienste und Apache-Reverse-Proxy aktivieren.
+10. Django-Deployment-Check, Suche, Dienste, HTTPS und Zertifikatserneuerung testen.
 
 Das Editor-Bundle liegt versioniert in `static/editor/wiki-editor.js`. Auf dem
 Produktivserver wird daher weder Node.js installiert noch ein Frontend-Build
@@ -134,14 +116,12 @@ Eine eventuell systemweit installierte Django-Version wird nur gemeldet und
 nicht verwendet. Fuer den Wiki-Dienst gilt ausschliesslich die durch
 `requirements.txt` festgelegte Version in `/var/www/cd-wiki/.venv`.
 
-Nach erfolgreichem Abschluss die temporaere Konfiguration entfernen, weil sie
-SMTP- und Admin-Passwort enthaelt:
+Es wird keine temporaere Konfigurationsdatei benoetigt. Dauerhafte, automatisch
+erzeugte Geheimnisse speichert das Skript mit restriktiven Rechten unter
+`/etc/cd-wiki/wiki.env`. Das eingegebene Administrator-Passwort wird nur zur
+Kontoerstellung verwendet und nicht dort gespeichert.
 
-```bash
-sudo rm /root/cd-wiki-install.env
-```
-
-## 5. Installation pruefen
+## 3. Installation pruefen
 
 Der komplette technische Test kann erneut ausgefuehrt werden:
 

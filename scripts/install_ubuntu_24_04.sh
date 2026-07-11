@@ -23,8 +23,23 @@ readonly DB_NAME="cd-wiki"
 readonly DB_USER="cdwiki"
 readonly SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
-CONFIG_FILE=""
 TEMP_MEILI_BINARY=""
+TEMP_MEILI_METADATA=""
+DOMAIN=""
+LETSENCRYPT_EMAIL=""
+SMTP_HOST=""
+SMTP_PORT=""
+SMTP_USER=""
+SMTP_PASSWORD=""
+SMTP_USE_TLS="true"
+SMTP_USE_SSL="false"
+DEFAULT_FROM_EMAIL=""
+ADMIN_USERNAME=""
+ADMIN_EMAIL=""
+ADMIN_PASSWORD=""
+MEILISEARCH_VERSION=""
+MEILISEARCH_SHA256=""
+SOURCE_REVISION="manueller-upload"
 
 log() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -47,16 +62,19 @@ cleanup() {
     if [[ -n $TEMP_MEILI_BINARY && -f $TEMP_MEILI_BINARY ]]; then
         rm -f -- "$TEMP_MEILI_BINARY"
     fi
+    if [[ -n $TEMP_MEILI_METADATA && -f $TEMP_MEILI_METADATA ]]; then
+        rm -f -- "$TEMP_MEILI_METADATA"
+    fi
 }
 trap cleanup EXIT
 
 usage() {
     cat <<'EOF'
 Aufruf:
-  sudo bash scripts/install_ubuntu_24_04.sh /root/cd-wiki-install.env
+  sudo bash scripts/install_ubuntu_24_04.sh
   sudo bash scripts/install_ubuntu_24_04.sh --check
 
-Die Konfigurationsdatei muss root gehoeren und darf nur fuer root lesbar sein.
+Die Erstinstallation fragt alle erforderlichen Werte interaktiv ab.
 EOF
 }
 
@@ -71,49 +89,90 @@ require_ubuntu_2404() {
         die "Unterstuetzt wird ausschliesslich Ubuntu 24.04 LTS."
 }
 
-validate_config_file() {
-    [[ -f "$CONFIG_FILE" ]] || die "Konfigurationsdatei nicht gefunden: ${CONFIG_FILE}"
-    [[ $(stat -c '%u' "$CONFIG_FILE") == "0" ]] || die "Die Konfigurationsdatei muss root gehoeren."
-    local mode
-    mode=$(stat -c '%a' "$CONFIG_FILE")
-    (( (8#${mode} & 077) == 0 )) || die "Die Konfigurationsdatei muss Modus 600 oder strenger haben."
-}
-
-load_config_file() {
-    local line key value
-    local -A allowed=(
-        [DOMAIN]=1 [LETSENCRYPT_EMAIL]=1
-        [SMTP_HOST]=1 [SMTP_PORT]=1 [SMTP_USER]=1 [SMTP_PASSWORD]=1
-        [SMTP_USE_TLS]=1 [SMTP_USE_SSL]=1 [DEFAULT_FROM_EMAIL]=1
-        [ADMIN_USERNAME]=1 [ADMIN_EMAIL]=1 [ADMIN_PASSWORD]=1
-        [EXPECTED_GIT_COMMIT]=1 [MEILISEARCH_VERSION]=1 [MEILISEARCH_SHA256]=1
-    )
-
-    while IFS= read -r line || [[ -n $line ]]; do
-        line=${line%$'\r'}
-        [[ -z $line || $line =~ ^[[:space:]]*# ]] && continue
-        if [[ $line =~ ^([A-Z][A-Z0-9_]*)=\"([^\"]*)\"$ ]]; then
-            key=${BASH_REMATCH[1]}
-            value=${BASH_REMATCH[2]}
-        else
-            die "Ungueltige Konfigurationszeile. Erlaubt ist nur NAME=\"Wert\"."
-        fi
-        [[ ${allowed[$key]+isset} ]] || die "Unbekannter Konfigurationswert: ${key}"
-        printf -v "$key" '%s' "$value"
-    done < "$CONFIG_FILE"
-}
-
 require_value() {
     local name=$1
-    [[ -n ${!name:-} ]] || die "Pflichtwert ${name} fehlt in ${CONFIG_FILE}."
+    [[ -n ${!name:-} ]] || die "Pflichtwert ${name} fehlt."
     [[ ${!name} != *$'\n'* && ${!name} != *$'\r'* ]] || die "${name} darf keinen Zeilenumbruch enthalten."
+}
+
+prompt_value() {
+    local variable=$1 label=$2 default=${3:-} value
+    if [[ -n $default ]]; then
+        read -r -p "${label} [${default}]: " value
+        value=${value:-$default}
+    else
+        while [[ -z ${value:-} ]]; do
+            read -r -p "${label}: " value
+        done
+    fi
+    printf -v "$variable" '%s' "$value"
+}
+
+prompt_secret() {
+    local variable=$1 label=$2 minimum_length=${3:-1} first second
+    while true; do
+        read -r -s -p "${label}: " first
+        printf '\n'
+        read -r -s -p "${label} wiederholen: " second
+        printf '\n'
+        [[ -n $first ]] || { printf 'Der Wert darf nicht leer sein.\n' >&2; continue; }
+        (( ${#first} >= minimum_length )) || {
+            printf 'Der Wert muss mindestens %s Zeichen lang sein.\n' "$minimum_length" >&2
+            continue
+        }
+        [[ $first == "$second" ]] || { printf 'Die Eingaben stimmen nicht ueberein.\n' >&2; continue; }
+        printf -v "$variable" '%s' "$first"
+        return
+    done
+}
+
+collect_installation_values() {
+    local smtp_mode
+    [[ -t 0 ]] || die "Die Erstinstallation benoetigt ein interaktives Terminal."
+
+    printf '\nCD-Wiki Erstinstallation\n'
+    printf 'Alle Angaben werden nur fuer diese Installation verwendet. Passwoerter bleiben unsichtbar.\n\n'
+    prompt_value DOMAIN "Domain" "wiki.only-space.de"
+    prompt_value ADMIN_USERNAME "Administrator-Benutzername" "admin"
+    prompt_value ADMIN_EMAIL "Administrator-E-Mail"
+    prompt_secret ADMIN_PASSWORD "Administrator-Passwort" 16
+    prompt_value LETSENCRYPT_EMAIL "E-Mail fuer Let's Encrypt" "$ADMIN_EMAIL"
+    prompt_value SMTP_HOST "SMTP-Server"
+    prompt_value SMTP_USER "SMTP-Benutzer"
+    prompt_secret SMTP_PASSWORD "SMTP-Passwort"
+    prompt_value smtp_mode "SMTP-Sicherheit (starttls oder ssl)" "starttls"
+    case "${smtp_mode,,}" in
+        starttls)
+            SMTP_USE_TLS=true
+            SMTP_USE_SSL=false
+            prompt_value SMTP_PORT "SMTP-Port" "587"
+            ;;
+        ssl)
+            SMTP_USE_TLS=false
+            SMTP_USE_SSL=true
+            prompt_value SMTP_PORT "SMTP-Port" "465"
+            ;;
+        *) die "SMTP-Sicherheit muss starttls oder ssl sein." ;;
+    esac
+    prompt_value DEFAULT_FROM_EMAIL "Absenderadresse" "$SMTP_USER"
+}
+
+confirm_installation() {
+    local confirmation
+    printf '\nZusammenfassung:\n'
+    printf '  Domain:           %s\n' "$DOMAIN"
+    printf '  Administrator:    %s <%s>\n' "$ADMIN_USERNAME" "$ADMIN_EMAIL"
+    printf '  SMTP:             %s:%s\n' "$SMTP_HOST" "$SMTP_PORT"
+    printf '  Datenbank:        %s\n' "$DB_NAME"
+    printf '  Anwendungspfad:   %s\n\n' "$APP_DIR"
+    read -r -p "Installation jetzt vollstaendig starten? [ja/NEIN]: " confirmation
+    [[ ${confirmation,,} == "ja" ]] || die "Installation auf Wunsch abgebrochen."
 }
 
 validate_config_values() {
     local required=(
         DOMAIN LETSENCRYPT_EMAIL SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD
         DEFAULT_FROM_EMAIL ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
-        MEILISEARCH_VERSION MEILISEARCH_SHA256 EXPECTED_GIT_COMMIT
     )
     local name
     for name in "${required[@]}"; do
@@ -136,9 +195,6 @@ validate_config_values() {
         die "SMTP_USE_TLS und SMTP_USE_SSL duerfen nicht gleichzeitig true sein."
     [[ $ADMIN_USERNAME =~ ^[A-Za-z0-9_.@+-]+$ ]] || die "ADMIN_USERNAME enthaelt ungueltige Zeichen."
     (( ${#ADMIN_PASSWORD} >= 16 )) || die "ADMIN_PASSWORD muss mindestens 16 Zeichen lang sein."
-    [[ $MEILISEARCH_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "MEILISEARCH_VERSION muss wie v1.45.0 aussehen."
-    [[ $MEILISEARCH_SHA256 =~ ^[A-Fa-f0-9]{64}$ ]] || die "MEILISEARCH_SHA256 muss eine SHA-256-Pruefsumme sein."
-    [[ $EXPECTED_GIT_COMMIT =~ ^[A-Fa-f0-9]{40}$ ]] || die "EXPECTED_GIT_COMMIT muss ein vollstaendiger Git-Commit sein."
 }
 
 ensure_fresh_target() {
@@ -164,11 +220,14 @@ ensure_fresh_target() {
     ! getent group "$MEILI_GROUP" >/dev/null || die "Systemgruppe ${MEILI_GROUP} existiert bereits."
     [[ -f "${SOURCE_DIR}/manage.py" && -f "${SOURCE_DIR}/static/editor/wiki-editor.js" ]] || \
         die "Projektquelle oder gebautes Editor-Bundle fehlt."
-    command -v git >/dev/null || die "Git wird fuer die Commit-Pruefung benoetigt."
-    [[ $(git -C "$SOURCE_DIR" rev-parse HEAD) == "${EXPECTED_GIT_COMMIT,,}" ]] || \
-        die "Der ausgecheckte Commit stimmt nicht mit EXPECTED_GIT_COMMIT ueberein."
-    [[ -z $(git -C "$SOURCE_DIR" status --porcelain) ]] || \
-        die "Das Git-Arbeitsverzeichnis ist nicht sauber."
+    if command -v git >/dev/null && git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        [[ -z $(git -C "$SOURCE_DIR" status --porcelain) ]] || \
+            die "Das Git-Arbeitsverzeichnis ist nicht sauber."
+        SOURCE_REVISION=$(git -C "$SOURCE_DIR" rev-parse HEAD)
+        log "Projektstand: Git-Commit ${SOURCE_REVISION}"
+    else
+        log "Hinweis: Kein Git-Metadatenverzeichnis vorhanden; installiere die hochgeladenen Projektdateien."
+    fi
     if ss -ltnH | awk '{print $4}' | grep -Eq '(^|:)8000$|(^|:)7700$'; then
         die "Port 8000 oder 7700 ist bereits belegt."
     fi
@@ -191,6 +250,31 @@ check_system_django() {
     else
         log "Django ist systemweit nicht installiert und wird in der isolierten Projektumgebung eingerichtet."
     fi
+}
+
+test_smtp_connection() {
+    log "Pruefe die verschluesselte SMTP-Anmeldung."
+    SMTP_PASSWORD="$SMTP_PASSWORD" python3 - \
+        "$SMTP_HOST" "$SMTP_PORT" "$SMTP_USER" "$SMTP_USE_SSL" <<'PY'
+import os
+import smtplib
+import ssl
+import sys
+
+host, port, username, use_ssl = sys.argv[1:]
+context = ssl.create_default_context()
+if use_ssl == "true":
+    with smtplib.SMTP_SSL(host, int(port), timeout=20, context=context) as smtp:
+        smtp.ehlo()
+        smtp.login(username, os.environ["SMTP_PASSWORD"])
+else:
+    with smtplib.SMTP(host, int(port), timeout=20) as smtp:
+        smtp.ehlo()
+        smtp.starttls(context=context)
+        smtp.ehlo()
+        smtp.login(username, os.environ["SMTP_PASSWORD"])
+PY
+    log "SMTP-Anmeldung erfolgreich."
 }
 
 install_packages() {
@@ -266,7 +350,7 @@ create_accounts_and_paths() {
 }
 
 install_meilisearch() {
-    local architecture asset
+    local architecture asset download_url release_info
     architecture=$(dpkg --print-architecture)
     case "$architecture" in
         amd64) asset="meilisearch-linux-amd64" ;;
@@ -274,10 +358,50 @@ install_meilisearch() {
         *) die "Meilisearch wird von diesem Skript auf ${architecture} nicht unterstuetzt." ;;
     esac
 
+    TEMP_MEILI_METADATA=$(mktemp)
+    log "Ermittle die aktuelle stabile Meilisearch-Version."
+    curl --fail --location --silent --show-error --retry 3 --retry-all-errors \
+        --proto '=https' --tlsv1.2 \
+        -H 'Accept: application/vnd.github+json' \
+        -H 'X-GitHub-Api-Version: 2022-11-28' \
+        https://api.github.com/repos/meilisearch/meilisearch/releases/latest \
+        -o "$TEMP_MEILI_METADATA"
+    release_info=$(python3 - "$TEMP_MEILI_METADATA" "$asset" <<'PY'
+import json
+import re
+import sys
+
+metadata_path, asset_name = sys.argv[1:]
+with open(metadata_path, encoding="utf-8") as source:
+    release = json.load(source)
+
+version = release.get("tag_name", "")
+if not re.fullmatch(r"v\d+\.\d+\.\d+", version):
+    raise SystemExit("Ungueltige Meilisearch-Versionsangabe in der GitHub-Antwort.")
+
+for asset in release.get("assets", []):
+    if asset.get("name") != asset_name:
+        continue
+    url = asset.get("browser_download_url", "")
+    digest = asset.get("digest", "") or ""
+    if not url.startswith("https://github.com/meilisearch/meilisearch/releases/download/"):
+        raise SystemExit("Ungueltige Meilisearch-Downloadadresse.")
+    if not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest):
+        raise SystemExit("GitHub liefert fuer das Meilisearch-Asset keinen gueltigen SHA-256-Digest.")
+    print(f"{version}\t{url}\t{digest.removeprefix('sha256:')}")
+    break
+else:
+    raise SystemExit(f"Meilisearch-Asset nicht gefunden: {asset_name}")
+PY
+    )
+    IFS=$'\t' read -r MEILISEARCH_VERSION download_url MEILISEARCH_SHA256 <<< "$release_info"
+    rm -f "$TEMP_MEILI_METADATA"
+    TEMP_MEILI_METADATA=""
+
     TEMP_MEILI_BINARY=$(mktemp)
     log "Lade Meilisearch ${MEILISEARCH_VERSION} und pruefe SHA-256."
-    curl --fail --location --proto '=https' --tlsv1.2 \
-        "https://github.com/meilisearch/meilisearch/releases/download/${MEILISEARCH_VERSION}/${asset}" \
+    curl --fail --location --silent --show-error --retry 3 --retry-all-errors \
+        --proto '=https' --tlsv1.2 "$download_url" \
         -o "$TEMP_MEILI_BINARY"
     printf '%s  %s\n' "${MEILISEARCH_SHA256,,}" "$TEMP_MEILI_BINARY" | sha256sum --check --status || \
         die "Die Meilisearch-Pruefsumme stimmt nicht."
@@ -579,14 +703,13 @@ main() {
         exit 0
     fi
 
-    [[ $# -eq 1 ]] || { usage; exit 2; }
-    CONFIG_FILE=$(readlink -f -- "$1")
-    validate_config_file
-    load_config_file
-    validate_config_values
-
+    [[ $# -eq 0 ]] || { usage; exit 2; }
     ensure_fresh_target
+    collect_installation_values
+    validate_config_values
+    confirm_installation
     install_packages
+    test_smtp_connection
     obtain_certificate
     create_accounts_and_paths
     install_meilisearch
@@ -596,10 +719,14 @@ main() {
     configure_apache
     post_install_checks
 
-    printf 'Installiert am %s aus %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$SOURCE_DIR" > "$INSTALL_MARKER"
+    printf 'Installiert am %s aus %s; Revision %s; Meilisearch %s\n' \
+        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$SOURCE_DIR" "$SOURCE_REVISION" \
+        "$MEILISEARCH_VERSION" > "$INSTALL_MARKER"
     chmod 0640 "$INSTALL_MARKER"
+    unset SMTP_PASSWORD ADMIN_PASSWORD
     log "Installation abgeschlossen: https://${DOMAIN}/"
-    log "Die Installationskonfiguration enthaelt Geheimnisse und sollte jetzt sicher geloescht werden."
 }
 
-main "$@"
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    main "$@"
+fi

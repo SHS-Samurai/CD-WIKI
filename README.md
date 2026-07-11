@@ -18,6 +18,14 @@ Dateianhaenge, Kommentare, Auditlog und Suche robust bereitstellen.
 
 Node.js wird nur fuer den Editor-Build verwendet.
 
+## Dokumentation
+
+- [Bedienungsanleitung](docs/BEDIENUNGSANLEITUNG.md)
+- [Installation](docs/INSTALL.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Sicherheit](docs/SECURITY.md)
+- [Themes, CSS und Sidebars](docs/THEMES.md)
+
 ## Lokaler Start
 
 1. `.env.example` nach `.env` kopieren und Werte setzen.

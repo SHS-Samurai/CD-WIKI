@@ -55,4 +55,4 @@
 
 ## Phase 6 - Serverbetrieb
 
-- [x] Abgesicherte Erstinstallation fuer Ubuntu 24.04 dokumentieren und skripten
+- [x] Abgesicherte, stufenweise Erstinstallation fuer Ubuntu 24.04 dokumentieren und skripten

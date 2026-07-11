@@ -4,8 +4,9 @@ Zielsystem: Ubuntu-VPS mit Apache und mod_wsgi, MySQL und lokalem
 Meilisearch-Dienst. Gunicorn und uWSGI werden nicht eingesetzt.
 
 Die reproduzierbare Erstinstallation fuer einen frischen Ubuntu-24.04-VPS ist
-in `docs/SERVER_INSTALLATION.md` beschrieben und wird durch
-`scripts/install_ubuntu_24_04.sh` ausgefuehrt.
+in `docs/SERVER_INSTALLATION.md` beschrieben. Sie besteht aus getrennten,
+kontrollierten Stufen unter `scripts/ubuntu24/`. Keine dieser Stufen aendert
+SSH, Firewall, Netzwerk- oder Resolverkonfiguration.
 
 ## Dienste
 
@@ -108,6 +109,7 @@ python manage.py prune_rate_limits
 
 - Vor Migrationen Datenbank sichern.
 - Vor Deployment aktuellen Stand taggen oder Commit notieren.
-- Bei Fehlern Code auf vorherigen Commit zuruecksetzen und Apache neu starten.
+- Bei Fehlern nicht weiter installieren, Diagnose sichern und den dokumentierten
+  Provider-Snapshot als vollstaendigen Rueckrollpunkt verwenden.
 
 Konkrete Serveraenderungen werden erst nach separater Planung ausgefuehrt.

@@ -244,10 +244,11 @@ ensure_fresh_target() {
     [[ -f "${SOURCE_DIR}/manage.py" && -f "${SOURCE_DIR}/static/editor/wiki-editor.js" ]] || \
         die "Projektquelle oder gebautes Editor-Bundle fehlt."
     if command -v git >/dev/null && git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        [[ -z $(git -C "$SOURCE_DIR" status --porcelain) ]] || \
-            die "Das Git-Arbeitsverzeichnis ist nicht sauber."
         SOURCE_REVISION=$(git -C "$SOURCE_DIR" rev-parse HEAD)
         log "Projektstand: Git-Commit ${SOURCE_REVISION}"
+        if [[ -n $(git -C "$SOURCE_DIR" status --porcelain) ]]; then
+            log "Hinweis: Lokale oder hochgeladene Aenderungen sind vorhanden und werden mitinstalliert."
+        fi
     else
         log "Hinweis: Kein Git-Metadatenverzeichnis vorhanden; installiere die hochgeladenen Projektdateien."
     fi

@@ -45,9 +45,10 @@ Vor dem Start muessen folgende Punkte erfuellt sein:
 Der Installer setzt voraus, dass auf dem frischen System noch keine Installation
 unter den Laufzeitpfaden, keine gleichnamige Datenbank und keine gleichnamigen
 systemd-Dienste existieren. Das Projekt selbst muss bereits vollstaendig unter
-`/var/www/cd-wiki` liegen. Ist es ein Git-Repository, muss der Arbeitsbaum
-sauber sein; ein manueller Upload ohne `.git` wird ebenfalls unterstuetzt. Der
-Installer bricht bei Abweichungen ab und ueberschreibt keine bestehende Installation.
+`/var/www/cd-wiki` liegen. Ein Git-Repository, lokale Aenderungen und ein
+manueller Upload ohne `.git` werden unterstuetzt. Vorhandene Git-Informationen
+werden zur Nachvollziehbarkeit protokolliert, blockieren die Installation aber
+nicht. Der Installer ueberschreibt keine bestehende Installation.
 Gleichnamige Systembenutzer sowie vorhandene Meilisearch-, Apache- oder
 MySQL-Konfigurationen werden ebenfalls nicht ersetzt.
 
@@ -63,7 +64,8 @@ git status --short
 git rev-parse HEAD
 ```
 
-`git status --short` darf bei einer Git-Installation nichts ausgeben.
+`git status --short` zeigt gegebenenfalls lokale oder hochgeladene Aenderungen.
+Diese werden vom Installer nicht verworfen.
 
 Wenn die Dateien bereits in `/var/www/cd-wiki` liegen, nicht erneut klonen.
 Der Installer kann vollstaendig hochgeladene Projektdateien auch ohne das

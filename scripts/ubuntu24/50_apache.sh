@@ -42,10 +42,10 @@ EOF
 a2ensite "$(basename "$APACHE_SITE")"
 apache2ctl configtest
 assert_ssh_access
-systemctl reload apache2.service
+timeout 60s systemctl reload apache2.service
 assert_ssh_access
 
-certbot certonly --webroot -w /var/www/cd-wiki-acme \
+timeout 300s certbot certonly --webroot -w /var/www/cd-wiki-acme \
     --non-interactive --agree-tos --no-eff-email \
     --email "$letsencrypt_email" -d "$DOMAIN"
 [[ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]] || die "TLS-Zertifikat fehlt."
@@ -112,7 +112,7 @@ EOF
 if ! apache2ctl configtest; then
     cp --preserve=mode,ownership,timestamps "${STATE_DIR}/apache-http-only.conf" "$APACHE_SITE"
     apache2ctl configtest
-    systemctl reload apache2.service
+    timeout 60s systemctl reload apache2.service
     die "HTTPS-Konfiguration ungueltig; HTTP-Konfiguration wurde wiederhergestellt."
 fi
 
@@ -126,11 +126,11 @@ EOF
 chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/cd-wiki-reload-apache
 
 assert_ssh_access
-systemctl reload apache2.service
-systemctl enable --now certbot.timer
+timeout 60s systemctl reload apache2.service
+timeout 60s systemctl enable --now certbot.timer
 assert_ssh_access
 curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
     --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/" >/dev/null
 
 stage_finish 50
-log "Naechste Stufe: bash scripts/ubuntu24/60_verify.sh"
+log "Naechste Stufe: bash scripts/install_cd_wiki.sh verify"

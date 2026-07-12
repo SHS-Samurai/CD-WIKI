@@ -17,6 +17,7 @@ readonly BACKUP_DIR="/var/backups/cd-wiki"
 readonly STATE_DIR="/var/lib/cd-wiki-installer"
 readonly STATE_FILE="${STATE_DIR}/state.env"
 readonly SSH_BASELINE="${STATE_DIR}/ssh.sha256"
+readonly INSTALLER_BASELINE="${STATE_DIR}/installer.sha256"
 readonly MEILI_USER="meilisearch"
 readonly MEILI_GROUP="meilisearch"
 readonly MEILI_ENV="/etc/meilisearch.env"
@@ -35,6 +36,11 @@ die() {
 
 require_root() {
     [[ ${EUID} -eq 0 ]] || die "Diese Stufe muss als root ausgefuehrt werden."
+}
+
+require_dispatcher() {
+    [[ ${CD_WIKI_INSTALLER_DISPATCHED:-} == "1" ]] || \
+        die "Diese Stufe darf nur ueber scripts/install_cd_wiki.sh gestartet werden."
 }
 
 require_ubuntu_2404() {
@@ -80,6 +86,22 @@ write_ssh_baseline() {
     chmod 0600 "$SSH_BASELINE"
 }
 
+write_installer_baseline() {
+    {
+        sha256sum "${APP_DIR}/scripts/install_cd_wiki.sh"
+        find "${APP_DIR}/scripts/ubuntu24" -maxdepth 1 -type f \
+            \( -name '*.sh' -o -name '*.py' \) -print0 | sort -z | \
+            xargs -0 sha256sum
+    } > "$INSTALLER_BASELINE"
+    chmod 0600 "$INSTALLER_BASELINE"
+}
+
+assert_installer_unchanged() {
+    [[ -f "$INSTALLER_BASELINE" ]] || die "Installer-Pruefsummen fehlen."
+    sha256sum --check --quiet "$INSTALLER_BASELINE" || \
+        die "Installationsskripte wurden nach dem Preflight veraendert."
+}
+
 run_as_app() {
     runuser -u "$APP_USER" -- "$VENV_DIR/bin/python" "$APP_DIR/manage.py" "$@"
 }
@@ -98,9 +120,11 @@ write_env_line() {
 }
 
 stage_start() {
+    require_dispatcher
     require_root
     require_ubuntu_2404
     require_state
+    assert_installer_unchanged
     assert_ssh_access
 }
 

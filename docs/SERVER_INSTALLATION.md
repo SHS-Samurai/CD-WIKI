@@ -7,7 +7,7 @@ ausgefuehrt.
 
 ## Unantastbare Zugriffsregeln
 
-Die Installationsskripte:
+Das Einstiegsskript `scripts/install_cd_wiki.sh` und seine internen Stufen:
 
 - aendern keine Datei unter `/etc/ssh`;
 - starten, stoppen, deaktivieren oder maskieren SSH nicht;
@@ -39,6 +39,21 @@ selbst den Serverzugang nicht konfiguriert.
 Die Skripte richten bewusst keine Firewall ein. Den SSH-Port und die
 Provider-Firewall verwaltest du getrennt von dieser Installation.
 
+## Einziger Installationseinstieg
+
+Alle Installationsstufen werden ausschliesslich ueber dasselbe Skript gestartet:
+
+```bash
+cd /var/www/cd-wiki
+sudo bash scripts/install_cd_wiki.sh status
+```
+
+Es gibt absichtlich keinen `all`-Modus. Jede schreibende Stufe nennt ihren
+Umfang, verlangt ein eigenes Bestaetigungswort und beendet sich danach. Die
+internen Dateien unter `scripts/ubuntu24/` verweigern einen direkten Start.
+Nach dem Preflight werden Pruefsummen aller Installerdateien gespeichert; eine
+spaetere Aenderung sperrt die folgenden Stufen.
+
 ## Vor dem ersten Schritt
 
 In der ersten SSH-Sitzung:
@@ -48,6 +63,7 @@ cd /var/www/cd-wiki
 test -f manage.py
 test -f static/editor/wiki-editor.js
 python3 scripts/ubuntu24/verify_access_safety.py
+sudo bash scripts/install_cd_wiki.sh status
 ```
 
 Die letzte Ausgabe muss `Zugriffsschutz-Pruefung erfolgreich.` lauten. Danach
@@ -66,7 +82,7 @@ anzeigen.
 
 ```bash
 cd /var/www/cd-wiki
-sudo bash scripts/ubuntu24/00_preflight.sh
+sudo bash scripts/install_cd_wiki.sh preflight
 ```
 
 Diese Stufe installiert nichts. Sie prueft Betriebssystem, Ressourcen, DNS,
@@ -79,7 +95,7 @@ Jetzt in der zweiten Sitzung erneut `systemctl is-active ssh` ausfuehren.
 
 ```bash
 cd /var/www/cd-wiki
-sudo bash scripts/ubuntu24/10_packages.sh
+sudo bash scripts/install_cd_wiki.sh packages
 ```
 
 Installiert werden Apache, mod_wsgi, MySQL, Certbot, Python und Build-Pakete.
@@ -94,7 +110,7 @@ Danach den SSH-Zugang wieder in der zweiten Sitzung pruefen.
 
 ```bash
 cd /var/www/cd-wiki
-sudo bash scripts/ubuntu24/20_database.sh
+sudo bash scripts/install_cd_wiki.sh database
 ```
 
 Diese Stufe erstellt ausschliesslich:
@@ -113,7 +129,7 @@ SMTP bleibt deaktiviert; fuer die Installation ist kein Postfach erforderlich.
 
 ```bash
 cd /var/www/cd-wiki
-sudo bash scripts/ubuntu24/30_application.sh
+sudo bash scripts/install_cd_wiki.sh application
 ```
 
 Die Stufe erstellt die isolierte Python-Umgebung, installiert die festgelegten
@@ -128,7 +144,7 @@ nicht geloescht, sondern unter `/var/backups/cd-wiki` gesichert.
 
 ```bash
 cd /var/www/cd-wiki
-sudo bash scripts/ubuntu24/40_meilisearch.sh
+sudo bash scripts/install_cd_wiki.sh search
 ```
 
 Meilisearch wird passend zu `amd64` oder `arm64` von der offiziellen
@@ -144,7 +160,7 @@ funktionieren. Dann:
 
 ```bash
 cd /var/www/cd-wiki
-sudo bash scripts/ubuntu24/50_apache.sh
+sudo bash scripts/install_cd_wiki.sh web
 ```
 
 Die Stufe fragt nur nach einer E-Mail-Adresse fuer Let's Encrypt. Sie aktiviert
@@ -161,7 +177,7 @@ deaktiviert oder ueberschrieben.
 
 ```bash
 cd /var/www/cd-wiki
-sudo bash scripts/ubuntu24/60_verify.sh
+sudo bash scripts/install_cd_wiki.sh verify
 ```
 
 Geprueft werden SSH, Apache-Syntax, MySQL, Meilisearch, Certbot-Timer,

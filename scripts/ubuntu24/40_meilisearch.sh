@@ -113,6 +113,8 @@ EnvironmentFile=${MEILI_ENV}
 ExecStart=/usr/local/bin/meilisearch
 Restart=on-failure
 RestartSec=5s
+TimeoutStartSec=60s
+TimeoutStopSec=30s
 UMask=0027
 NoNewPrivileges=true
 PrivateDevices=true
@@ -168,12 +170,12 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now meilisearch.service
-systemctl enable --now cd-wiki-maintenance.timer
+timeout 60s systemctl daemon-reload
+timeout 60s systemctl enable --now meilisearch.service
+timeout 60s systemctl enable --now cd-wiki-maintenance.timer
 curl --fail --silent --show-error --connect-timeout 5 --max-time 20 \
     http://127.0.0.1:7700/health >/dev/null
 
 printf 'MEILISEARCH_VERSION=%s\n' "$meili_version" >> "$STATE_FILE"
 stage_finish 40
-log "Naechste Stufe: bash scripts/ubuntu24/50_apache.sh"
+log "Naechste Stufe: bash scripts/install_cd_wiki.sh web"

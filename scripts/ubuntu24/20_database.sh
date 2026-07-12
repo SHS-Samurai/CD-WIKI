@@ -82,4 +82,4 @@ mysqldump --protocol=socket --single-transaction --no-tablespaces \
     "${BACKUP_DIR}/before-first-migration-$(date -u '+%Y%m%dT%H%M%SZ').sql.gz"
 
 stage_finish 20
-log "Naechste Stufe: bash scripts/ubuntu24/30_application.sh"
+log "Naechste Stufe: bash scripts/install_cd_wiki.sh application"

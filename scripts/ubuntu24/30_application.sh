@@ -28,8 +28,9 @@ find "$APP_DIR" -type f -perm /111 -exec chmod 0750 {} +
 find "$APP_DIR" -type f ! -perm /111 -exec chmod 0640 {} +
 
 python3 -m venv "$VENV_DIR"
-MAKEFLAGS=-j1 "$VENV_DIR/bin/python" -m pip install --upgrade pip
-MAKEFLAGS=-j1 "$VENV_DIR/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
+MAKEFLAGS=-j1 "$VENV_DIR/bin/python" -m pip install --timeout 30 --retries 3 \
+    -r "$APP_DIR/requirements.txt"
+"$VENV_DIR/bin/python" -m pip check
 django_version=$("$VENV_DIR/bin/python" -c 'import django; print(django.get_version())')
 [[ $django_version == 5.2.* ]] || die "Django ${django_version} statt 5.2.x installiert."
 
@@ -40,6 +41,9 @@ find "$VENV_DIR" -type f ! -perm /111 -exec chmod 0640 {} +
 ln -s "$APP_ENV" "${APP_DIR}/.env"
 
 run_as_app_timeout 120s check
+run_as_app_timeout 120s check --deploy
+run_as_app_timeout 120s makemigrations --check --dry-run
+run_as_app_timeout 120s migrate --plan
 run_as_app_timeout 300s migrate --noinput
 run_as_app_timeout 180s collectstatic --noinput
 
@@ -65,4 +69,4 @@ runuser -u "$APP_USER" -- env DJANGO_SUPERUSER_PASSWORD="$admin_password" \
 unset admin_password admin_password_repeat
 
 stage_finish 30
-log "Naechste Stufe: bash scripts/ubuntu24/40_meilisearch.sh"
+log "Naechste Stufe: bash scripts/install_cd_wiki.sh search"

@@ -10,11 +10,13 @@ unprivilegierten Benutzer `cdwiki`. MySQL und Meilisearch werden nur an
 Loopback-Adressen gebunden. Vor dem produktiven Start sind eine externe
 Sicherung und ein Wiederherstellungstest erforderlich.
 
-Die Erstinstallation ist in getrennte Stufen unter `scripts/ubuntu24/`
-aufgeteilt. Vor und nach jeder Stufe werden SSH-Dienst, SSH-Listener und die im
+Die Erstinstallation wird ausschliesslich ueber `scripts/install_cd_wiki.sh`
+stufenweise ausgefuehrt. Einen automatischen Gesamtlauf gibt es nicht. Vor und
+nach jeder Stufe werden SSH-Dienst, SSH-Listener und die im
 Preflight erfassten SHA-256-Pruefsummen unter `/etc/ssh` kontrolliert. Die
-Skripte aendern weder SSH noch Firewall, Netzwerk, Resolver oder vorhandene
-Apache-Sites. Apache wird nur nach erfolgreichem Konfigurationstest neu geladen.
+Pruefsummen der Installationsskripte werden ebenfalls festgehalten. Die Skripte
+aendern weder SSH noch Firewall, Netzwerk, Resolver oder vorhandene Apache-Sites.
+Apache wird nur nach erfolgreichem Konfigurationstest neu geladen.
 
 ## Grundregeln
 

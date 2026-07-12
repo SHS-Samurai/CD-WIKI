@@ -9,10 +9,11 @@ ROOT = Path(__file__).resolve().parent
 FORBIDDEN = {
     r"^[ \t]*(?:sudo[ \t]+)?(?:/usr/sbin/)?(ufw|iptables|ip6tables|nft)\b": "Firewall-Befehl",
     r"^[ \t]*(?:sudo[ \t]+)?(?:/usr/sbin/)?(reboot|shutdown|poweroff|halt)\b": "Neustart- oder Ausschaltbefehl",
-    r"^[ \t]*(?:sudo[ \t]+)?apt(?:-get)?\s+(?:dist-|full-)?upgrade\b": "Paket-Upgrade",
-    r"^[ \t]*(?:sudo[ \t]+)?a2dissite\b": "Deaktivieren bestehender Apache-Sites",
-    r"^[ \t]*(?:sudo[ \t]+)?systemctl\s+(?:stop|restart|disable|mask)\s+ssh": "Eingriff in SSH-Dienst",
+    r"^[ \t]*(?:sudo[ \t]+)?apt(?:-get)?(?:\s+-[^\n ]+)*\s+(?:dist-upgrade|full-upgrade|upgrade|remove|purge|autoremove)\b": "Destruktive Paketaktion",
+    r"^[ \t]*(?:sudo[ \t]+)?a2dis(?:site|conf|mod)\b": "Deaktivieren bestehender Apache-Konfiguration",
+    r"^[ \t]*(?:sudo[ \t]+)?(?:timeout\s+\S+\s+)?systemctl\b[^\n]*(?:start|stop|restart|reload|enable|disable|mask|unmask|try-restart|reload-or-restart)\b[^\n]*(?:ssh|sshd)(?:\.service)?\b": "Eingriff in SSH-Dienst",
     r"^[ \t]*(?:sudo[ \t]+)?(?:service|invoke-rc\.d)\s+ssh\b": "Eingriff in SSH-Dienst",
+    r"\bopenssh-(?:client|server)\b": "OpenSSH-Paketaktion",
     r"^[ \t]*(?:sudo[ \t]+)?(?:cp|mv|install|chmod|chown|touch|mkdir|tee|sed)\b[^\n]*/etc/ssh": "Schreibzugriff auf SSH-Konfiguration",
     r"^[^#\n]*>[^\n]*/etc/ssh": "Umleitung in SSH-Konfiguration",
     r"/etc/(?:netplan|network|NetworkManager|systemd/network|resolv\.conf)": "Netzwerkkonfiguration",
@@ -22,7 +23,8 @@ FORBIDDEN = {
 
 def main() -> int:
     findings: list[str] = []
-    for path in sorted(ROOT.glob("*.sh")):
+    paths = [*ROOT.glob("*.sh"), ROOT.parent / "install_cd_wiki.sh"]
+    for path in sorted(paths):
         text = path.read_text(encoding="utf-8")
         for pattern, description in FORBIDDEN.items():
             for match in re.finditer(pattern, text, flags=re.IGNORECASE | re.MULTILINE):

@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=common.sh
 source "${SCRIPT_DIR}/common.sh"
 
+require_dispatcher
 require_root
 require_ubuntu_2404
 
@@ -42,6 +43,7 @@ SOURCE_REVISION=$(if command -v git >/dev/null 2>&1; then git -C "$APP_DIR" rev-
 EOF
 chmod 0600 "$STATE_FILE"
 write_ssh_baseline
+write_installer_baseline
 
 {
     printf 'Preflight: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -54,4 +56,4 @@ chmod 0600 "${STATE_DIR}/preflight-report.txt"
 mark_stage 00
 
 log "Preflight erfolgreich. Es wurden keine Pakete, Dienste, Firewall- oder SSH-Einstellungen geaendert."
-log "Naechste Stufe: bash scripts/ubuntu24/10_packages.sh"
+log "Naechste Stufe: bash scripts/install_cd_wiki.sh packages"

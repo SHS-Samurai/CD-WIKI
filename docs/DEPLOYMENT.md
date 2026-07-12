@@ -4,9 +4,9 @@ Zielsystem: Ubuntu-VPS mit Apache und mod_wsgi, MySQL und lokalem
 Meilisearch-Dienst. Gunicorn und uWSGI werden nicht eingesetzt.
 
 Die reproduzierbare Erstinstallation fuer einen frischen Ubuntu-24.04-VPS ist
-in `docs/SERVER_INSTALLATION.md` beschrieben. Sie besteht aus getrennten,
-kontrollierten Stufen unter `scripts/ubuntu24/`. Keine dieser Stufen aendert
-SSH, Firewall, Netzwerk- oder Resolverkonfiguration.
+in `docs/SERVER_INSTALLATION.md` beschrieben. Der einzige Einstiegspunkt ist
+`scripts/install_cd_wiki.sh`; er startet immer genau eine kontrollierte interne
+Stufe. Keine Stufe aendert SSH, Firewall, Netzwerk- oder Resolverkonfiguration.
 
 ## Dienste
 

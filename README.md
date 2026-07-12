@@ -27,6 +27,15 @@ Node.js wird nur fuer den Editor-Build verwendet.
 - [Sicherheit](docs/SECURITY.md)
 - [Themes, CSS und Sidebars](docs/THEMES.md)
 
+Die Serverinstallation beginnt immer mit genau einer kontrollierten Stufe:
+
+```bash
+sudo bash scripts/install_cd_wiki.sh preflight
+```
+
+Es gibt keinen automatischen Gesamtlauf. Details stehen in der
+[Serverinstallation](docs/SERVER_INSTALLATION.md).
+
 ## Lokaler Start
 
 1. `.env.example` nach `.env` kopieren und Werte setzen.

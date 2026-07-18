@@ -1,0 +1,1 @@
+<x-wiki-layout title="Gruppe anlegen"><h1 class="mb-8 text-3xl font-bold">Gruppe anlegen</h1>@include('admin.groups._form', ['action' => route('admin.groups.store'), 'method' => 'POST'])</x-wiki-layout>

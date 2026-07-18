@@ -1,0 +1,1 @@
+<x-wiki-layout :title="'Kategorie bearbeiten – '.$category->name"><h1 class="mb-8 text-3xl font-bold">Kategorie bearbeiten</h1>@include('admin.categories._form', ['action' => route('admin.categories.update', $category), 'method' => 'PATCH'])</x-wiki-layout>

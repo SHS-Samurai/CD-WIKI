@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.wiki-themed { background: var(--wiki-background); color: var(--wiki-text); font-family: var(--wiki-font); }
+.wiki-surface { background: var(--wiki-surface); }
+.wiki-container { width: min(var(--wiki-page-width), 100%); margin-inline: auto; }
+.wiki-page-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+.wiki-page-grid.has-left-sidebar { grid-template-columns: 220px minmax(0, 1fr); }
+.wiki-page-grid.has-right-sidebar { grid-template-columns: minmax(0, 1fr) 220px; }
+.wiki-page-grid.has-left-sidebar.has-right-sidebar { grid-template-columns: 220px minmax(0, 1fr) 220px; }
+.wiki-sidebar { align-self: start; border: 1px solid #d9dee7; border-radius: .5rem; background: var(--wiki-surface); padding: 1rem; }
+.wiki-sidebar a, .wiki-sidebar-button { display: block; width: 100%; border-radius: .25rem; padding: .5rem; color: var(--wiki-primary); text-align: left; }
+.wiki-sidebar a:hover, .wiki-sidebar-button:hover { background: var(--wiki-background); }
+.wiki-themed .bg-sky-700, .wiki-themed .from-sky-800 { background-color: var(--wiki-primary); }
+.wiki-themed .bg-white { background-color: var(--wiki-surface); }
+.wiki-themed .text-sky-700, .wiki-themed .text-sky-800 { color: var(--wiki-primary); }
+.wiki-themed .text-slate-500, .wiki-themed .text-slate-600 { color: var(--wiki-muted); }
+.wiki-themed .text-slate-700, .wiki-themed .text-slate-800, .wiki-themed .text-slate-900, .wiki-themed .text-slate-950 { color: var(--wiki-text); }
+
+@media (max-width: 1024px) {
+    .wiki-page-grid, .wiki-page-grid.has-left-sidebar, .wiki-page-grid.has-right-sidebar, .wiki-page-grid.has-left-sidebar.has-right-sidebar { grid-template-columns: minmax(0, 1fr); }
+    .wiki-sidebar-left { order: 2; }
+    .wiki-sidebar-right { order: 3; }
+}
+
+@layer components {
+    .wiki-content {
+        @apply text-slate-800 leading-7;
+    }
+
+    .wiki-content h1 { @apply mb-5 mt-8 text-3xl font-bold text-slate-950; }
+    .wiki-content h2 { @apply mb-4 mt-7 text-2xl font-bold text-slate-950; }
+    .wiki-content h3 { @apply mb-3 mt-6 text-xl font-semibold text-slate-950; }
+    .wiki-content p { @apply my-4; }
+    .wiki-content ul { @apply my-4 list-disc pl-7; }
+    .wiki-content ol { @apply my-4 list-decimal pl-7; }
+    .wiki-content blockquote { @apply my-5 border-l-4 border-sky-300 bg-sky-50 px-5 py-2 text-slate-700; }
+    .wiki-content code { @apply rounded bg-slate-100 px-1 py-0.5 font-mono text-sm; }
+    .wiki-content pre { @apply my-5 overflow-x-auto rounded-lg bg-slate-900 p-5 text-slate-100; }
+    .wiki-content pre code { @apply bg-transparent p-0 text-inherit; }
+    .wiki-content table { @apply my-5 w-full border-collapse; }
+    .wiki-content img { @apply my-5 h-auto max-w-full rounded-lg border border-slate-200; }
+    .wiki-content th { @apply border border-slate-300 bg-slate-100 px-3 py-2 text-left; }
+    .wiki-content td { @apply border border-slate-300 px-3 py-2; }
+    .wiki-content a { @apply text-sky-700 underline decoration-sky-300 underline-offset-2 hover:text-sky-900; }
+    .wiki-content .wiki-link-missing { @apply text-red-700 decoration-red-300 hover:text-red-900; }
+
+    .wiki-editor-content {
+        @apply wiki-content min-h-96 rounded-b-lg bg-white p-5 outline-none;
+    }
+
+    .wiki-editor-content.ProseMirror-focused { @apply ring-2 ring-inset ring-sky-500; }
+    .wiki-editor-content .selectedCell { @apply bg-sky-100; }
+}

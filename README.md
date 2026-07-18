@@ -1,82 +1,50 @@
-# Wiki
+# CD-Wiki
 
-Eigenes Wiki-System fuer `wiki.only-space.de` mit Rechte- und Versionskontrolle.
+CD-Wiki ist ein professionelles, webbasiertes Wiki auf Basis von Laravel 13, Blade, Tailwind CSS und Tiptap. Der Schwerpunkt liegt auf fein abgestuften Web-Rechten, sicherer Bearbeitung und einem einfachen Betrieb auf einem Standard-LAMP-Server.
 
-## Ziel
+## Funktionen
 
-Version 1 soll Webs, Topics, Benutzer, Gruppen, Web-Rechte, Revisionen,
-Dateianhaenge, Kommentare, Auditlog und Suche robust bereitstellen.
+- getrennte Webs als Namensräume und Berechtigungsgrenzen
+- Rechte für Öffentlichkeit, angemeldete Benutzer, Gruppen und einzelne Benutzer
+- Aktionen: Lesen, Erstellen, Bearbeiten, Kommentieren, Hochladen, Verwalten und Löschen
+- Tiptap-WYSIWYG-Editor mit Markdown-Speicherung und Wiki-Links
+- Artikel- und Anhangsversionierung, Vergleiche und Wiederherstellung
+- MySQL-Volltextsuche in Artikeln und extrahierten Anhangtexten
+- Kategorien, Kommentare, Papierkorb und unveränderliches Auditlog
+- administrativ bearbeitbares Layout und Theme
+- geschützter Erstinstallationsassistent sowie geprüfte Backup-Werkzeuge
 
-## Technik
+## Verzeichnisstruktur
 
-- Python
-- Django
-- MySQL
-- Meilisearch
-- Tiptap / ProseMirror JSON fuer Inhalte
-- Apache mit mod_wsgi auf Ubuntu
+| Pfad | Inhalt |
+|---|---|
+| [`wiki/`](wiki/) | aktive Laravel-Anwendung |
+| [`DEPRECATED/`](DEPRECATED/) | unveränderte Django-Referenz des Altsystems |
+| [`ANALYSE.md`](ANALYSE.md) | Analyse des früheren Systems |
+| [`DEPLOY.md`](DEPLOY.md) | Produktions-, Backup- und Freigabeanleitung |
+| [`MIGRATION.md`](MIGRATION.md) | Status vorhandener Bestandsdaten |
 
-Node.js wird nur fuer den Editor-Build verwendet.
+## Ersteinrichtung
 
-## Dokumentation
+1. Abhängigkeiten im Verzeichnis `wiki/` mit Composer und npm installieren.
+2. `.env.example` nach `.env` kopieren und `php artisan key:generate` ausführen.
+3. Den Webserver-DocumentRoot auf `wiki/public` setzen.
+4. Bei entferntem Zugriff einmal `php artisan wiki:installation-token` ausführen.
+5. Das Wiki im Browser öffnen und den Installationsassistenten abschließen.
 
-- [Bedienungsanleitung](docs/BEDIENUNGSANLEITUNG.md)
-- [Installation](docs/INSTALL.md)
-- [Serverinstallation Ubuntu 24.04](docs/SERVER_INSTALLATION.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [Sicherheit](docs/SECURITY.md)
-- [Themes, CSS und Sidebars](docs/THEMES.md)
+Der Assistent verwendet ausschließlich den lokalen MySQL-Server unter `127.0.0.1:3306`, erstellt die angegebene Datenbank und alle Tabellen und legt das erste Administratorkonto an. Der eingegebene MySQL-Benutzer benötigt die dafür erforderlichen Rechte. Zugangsdaten werden nicht im Repository gespeichert.
 
-Die Serverinstallation beginnt immer mit genau einer kontrollierten Stufe:
+Ausführliche Hinweise stehen in [DEPLOY.md](DEPLOY.md) und [wiki/README.md](wiki/README.md).
+
+## Qualitätssicherung
 
 ```bash
-sudo bash scripts/install_cd_wiki.sh preflight
+cd wiki
+php artisan test
+php vendor/bin/pint --test
+npm run build
+composer audit --locked
+npm audit
 ```
 
-Es gibt keinen automatischen Gesamtlauf. Details stehen in der
-[Serverinstallation](docs/SERVER_INSTALLATION.md).
-
-## Lokaler Start
-
-1. `.env.example` nach `.env` kopieren und Werte setzen.
-2. MySQL-Datenbank anlegen.
-3. Virtuelle Umgebung erstellen.
-4. Abhaengigkeiten installieren.
-5. Migrationen ausfuehren.
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py runserver
-```
-
-## Wichtige Entscheidungen
-
-- Der Benutzer basiert auf einem eigenen `accounts.User` mit Djangos `AbstractUser`.
-- MySQL ist von Anfang an die konfigurierte Datenbank.
-- Zugangsdaten werden nicht ins Repository geschrieben.
-- Wiki-Inhalte werden spaeter als ProseMirror-/Tiptap-JSON gespeichert, nicht als freies HTML.
-- Webs haben eine Grundsichtbarkeit und separate Web-Rechte fuer `view`, `create`, `edit`, `comment`, `upload`, `manage` und `delete`.
-- Rechte koennen an Benutzer, Gruppen, registrierte Benutzer und oeffentliche Gaeste vergeben werden.
-- Topic-Metadaten liegen in MySQL; aktuelle Inhalte und Revisionen liegen als JSON-Dateien im Storage.
-- Jede Topic-Aenderung erzeugt eine vollstaendige Revision mit Autor, Zeitpunkt, Aenderungsnotiz und Inhalts-Hash.
-- Alte Topic-Revisionen koennen angezeigt und wiederhergestellt werden; die Wiederherstellung erzeugt wieder eine neue Revision.
-- Topics werden beim Loeschen per Soft-Delete in den Papierkorb verschoben und koennen von Staff-Benutzern wiederhergestellt werden.
-- Auditlogs liegen in MySQL und speichern Aktion, Benutzer-Snapshot, IP-Adresse, User-Agent, Web-/Topic-Bezug, Revisionen, Hashes und optionale Details.
-- Registrierung ist im Adminbereich einstellbar: deaktiviert, Admin-Freigabe, E-Mail-Bestaetigung oder automatische Aktivierung.
-- Login und Registrierung nutzen persistente, IP-basierte Rate-Limits mit pseudonymisierten Schluesseln.
-- Web- und Topic-Views pruefen `view`, `create` und `edit` serverseitig.
-- Der Tiptap-Editor schreibt validiertes ProseMirror-JSON und kann Links, Tabellen, Wiki-Links sowie vorhandene Attachments einfuegen.
-- Das Admin-Web `admin` wird per Migration vorbereitet, bleibt privat und ist nur fuer Staff-Benutzer erreichbar.
-- Das Admin-Web zeigt Statusbereiche fuer System, Suche, Dateitypen und Erweiterungen.
-- Attachments werden versioniert im Storage gespeichert und nur ueber eine Django-Download-View mit `view`-Recht ausgeliefert.
-- Attachments werden beim Loeschen per Soft-Delete in den Papierkorb verschoben und koennen von Staff-Benutzern wiederhergestellt werden.
-- Uploads pruefen Dateiname, Endung, MIME-Type, Groesse und speichern Auditlogs fuer Upload und Aktualisierung.
-- Kommentare liegen in MySQL, werden serverseitig ueber das Web-Recht `comment` geschuetzt und per Soft-Delete geloescht.
-- Die Suche nutzt Meilisearch als Index, fragt aber nur ueber Django ab; Suchtreffer werden vor der Ausgabe erneut per `view`-Recht gefiltert.
-- Topic- und Attachment-Aenderungen stossen eine fehlertolerante Indexaktualisierung an; ein kompletter Neuaufbau erfolgt mit `python manage.py reindex_search`.
-- Das CSS ist in zentrale Variablen, Grundgestaltung, Layout, Komponenten und Editor-Regeln gegliedert. Globale Theme-Werte werden ausschliesslich im geschuetzten Adminbereich verwaltet.
-- Linke und rechte Sidebars sind standardmaessig deaktiviert, einzeln aktivierbar und werden bis einschliesslich 1.024 Pixel unter dem Hauptinhalt angeordnet. Details zu Theme, CSS-Variablen und Sidebars stehen in `docs/THEMES.md`.
+MySQL-spezifische Integrations- und Parallelitätstests werden ausschließlich gegen eine separate Datenbank mit dem Suffix `_test` ausgeführt; siehe [DEPLOY.md](DEPLOY.md).

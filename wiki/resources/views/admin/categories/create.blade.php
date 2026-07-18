@@ -1,0 +1,1 @@
+<x-wiki-layout title="Kategorie anlegen"><h1 class="mb-8 text-3xl font-bold">Kategorie anlegen</h1>@include('admin.categories._form', ['action' => route('admin.categories.store'), 'method' => 'POST'])</x-wiki-layout>

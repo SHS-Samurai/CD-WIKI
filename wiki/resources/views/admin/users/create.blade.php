@@ -1,0 +1,1 @@
+<x-wiki-layout title="Benutzer anlegen"><h1 class="mb-8 text-3xl font-bold">Benutzer anlegen</h1>@include('admin.users._form', ['action' => route('admin.users.store'), 'method' => 'POST'])</x-wiki-layout>

@@ -1,0 +1,1 @@
+<x-wiki-layout :title="'Gruppe bearbeiten – '.$group->name"><h1 class="mb-8 text-3xl font-bold">Gruppe bearbeiten</h1>@include('admin.groups._form', ['action' => route('admin.groups.update', $group), 'method' => 'PATCH'])</x-wiki-layout>
